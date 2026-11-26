@@ -19,7 +19,8 @@ from urllib.parse import urlparse, parse_qs, unquote
 from . import APP_NAME, __version__, DEFAULT_PORT
 from .source import open_source, hash_source, list_physical_drives, SourceError
 from .carve import Carver, CarveOptions, SignatureLibrary, SignatureError, check, normalize
-from .report import build_report
+from .report import build_report, build_clock_report
+from .clock import DvrStore, ClockError, convert, reference_clock_status
 
 WEB = Path(__file__).resolve().parent / "web"
 if getattr(sys, "frozen", False):  # PyInstaller
@@ -47,6 +48,7 @@ class App:
         self.job = {"type": None, "running": False, "progress": {}, "log": [], "result": None, "error": None}
         self._cancel = threading.Event()
         self._lock = threading.Lock()
+        self._log_lock = threading.Lock()
         self.token = secrets.token_urlsafe(24)
         self._load_settings()
 
@@ -71,10 +73,17 @@ class App:
             self.job["log"].append(line)
             self.job["log"] = self.job["log"][-500:]
         if self.case.get("folder"):
-            with open(Path(self.case["folder"]) / "case_log.txt", "a", encoding="utf-8") as f:
+            with self._log_lock, open(Path(self.case["folder"]) / "case_log.txt", "a", encoding="utf-8") as f:
                 f.write(line + "\n")
 
+    def _require_idle(self, what: str):
+        if self.job.get("running"):
+            raise RuntimeError(f"can't {what} while a {self.job['type']} job is running - "
+                               "wait for it to finish or cancel it")
+
     def open_case(self, data: dict, log=True):
+        if log:
+            self._require_idle("open a case")
         folder = (data.get("folder") or "").strip()
         if not folder:
             raise ValueError("choose a case folder")
@@ -97,6 +106,8 @@ class App:
         if ev.exists():
             e = json.loads(ev.read_text(encoding="utf-8"))
             self.source, self.evidence_hash = e.get("source", {}), e.get("hash", {})
+            if self.evidence_hash and self.evidence_hash.get("path") != self.source.get("path"):
+                self.evidence_hash = {}   # hash from an older build without a path, or a mismatch
         return case
 
     def _save_evidence(self):
@@ -105,6 +116,7 @@ class App:
                 json.dumps({"source": self.source, "hash": self.evidence_hash}, indent=2), encoding="utf-8")
 
     def set_source(self, path: str):
+        self._require_idle("change the evidence")
         with open_source(path) as s:
             self.source = s.describe()
         self.evidence_hash = {}
@@ -140,15 +152,29 @@ class App:
         if not self.source:
             raise ValueError("select evidence first")
         path = self.source["path"]
+        size = self.source["size"]
 
         def run():
             self.case_log(f"Hashing evidence {path}")
             with open_source(path) as s:
+                want_sha1 = "SHA1" in (getattr(s, "stored_hashes", None) or {})
                 r = hash_source(s, progress=lambda d, t: self._prog(done=d, total=t),
-                                cancel=self._cancel.is_set)
+                                cancel=self._cancel.is_set, sha1=want_sha1)
             r["when"] = utc()
-            self.evidence_hash = r
-            self._save_evidence()
+            r["path"] = path
+            r["size"] = size
+            stored = (self.source.get("stored_hashes") or {}) if self.source.get("path") == path else {}
+            if stored:
+                r["stored"] = stored
+                checks = {a: stored[a] == r[a.lower()] for a in ("MD5", "SHA1") if a in stored and a.lower() in r}
+                r["stored_match"] = all(checks.values()) if checks else None
+                self.case_log("Acquisition hash stored in the image: "
+                              + ", ".join(f"{k} {v}" for k, v in stored.items())
+                              + (" - MATCHES" if r["stored_match"] else
+                                 " - DOES NOT MATCH the data read" if r["stored_match"] is False else ""))
+            if self.source.get("path") == path:   # evidence can't change mid-job, but be certain
+                self.evidence_hash = r
+                self._save_evidence()
             self.case_log(f"Evidence MD5 {r['md5']}  SHA-256 {r['sha256']}")
             return r
         self._start("hash", run)
@@ -188,6 +214,12 @@ class App:
                            force_sector_aligned=bool(data.get("aligned")),
                            max_items=int(data.get("max_items") or 0), resume=bool(resume))
         path = self.source["path"]
+        case_snap = dict(self.case)
+        hash_snap = dict(self.evidence_hash) if self.evidence_hash.get("path") == path else {}
+        dvr_id = (data.get("dvr_id") or "").strip()
+        dvr_snapshot = self.store().get(dvr_id) if dvr_id else None
+        if dvr_snapshot and not dvr_snapshot.get("measurements"):
+            raise ValueError("the selected DVR has no clock measurements yet")
 
         def run():
             with open_source(path) as s:
@@ -196,11 +228,33 @@ class App:
                                                           items=st.items, elapsed=st.elapsed),
                            cancel=self._cancel.is_set, log=self.case_log)
                 st = c.run()
-            rep = build_report(out, self.case, self.evidence_hash)
+            if dvr_snapshot:
+                sp = out / "carve_session.json"
+                sess = json.loads(sp.read_text(encoding="utf-8"))
+                sess["clock"] = dvr_snapshot
+                sp.write_text(json.dumps(sess, indent=2), encoding="utf-8")
+                self.case_log(f"Clock offset from DVR '{dvr_snapshot['name']}' applied to report times")
+            rep = build_report(out, case_snap, hash_snap)
             self.case_log(f"Report written: {rep}")
             return {"run": out.name, "items": st.items, "canceled": st.canceled}
         self._start("carve", run)
         return out.name
+
+    def store(self) -> DvrStore:
+        if not self.case.get("folder"):
+            raise ValueError("open or create a case first")
+        return DvrStore(self.case["folder"])
+
+    _ref_cache = (0.0, {})
+
+    def time_info(self):
+        import time as _t
+        ts, st = App._ref_cache
+        if _t.time() - ts > 60:
+            st = reference_clock_status()
+            App._ref_cache = (_t.time(), st)
+        now = _dt.datetime.now()
+        return {"local": now.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3], "utc": utc(), "status": st}
 
     def cancel(self):
         self._cancel.set()
@@ -230,15 +284,21 @@ class App:
             return list(csv.DictReader(f))
 
     # ---------------------------------------------------------------- signatures
-    def test_signature(self, sig: dict, path: str, limit: int = 50):
+    TEST_MAX_BYTES = 2 * 1024 ** 3
+
+    def test_signature(self, sig: dict, path: str, limit: int = 50, max_bytes: int | None = None):
+        """Dry-run one signature on a sample. Capped so a whole drive can't tie up the GUI."""
         errs = check(sig)
         if errs:
             raise SignatureError("; ".join(errs))
+        cap = int(max_bytes or self.TEST_MAX_BYTES)
         with tempfile.TemporaryDirectory() as td, open_source(path) as s:
-            c = Carver(s, [normalize(sig)], CarveOptions(out_dir=td, dry_run=True, max_items=limit))
+            c = Carver(s, [normalize(sig)], CarveOptions(out_dir=td, dry_run=True, max_items=limit,
+                                                         end=min(s.size, cap)))
             st = c.run()
             return {"items": [i.row() for i in c.items], "rejected": st.rejected,
-                    "scanned": st.scanned}
+                    "scanned": st.scanned, "source_size": s.size,
+                    "capped": s.size > cap, "max_items_hit": len(c.items) >= limit}
 
     def state(self):
         with self._lock:
@@ -276,10 +336,10 @@ def browse(path: str):
 def open_in_os(path: Path):
     if sys.platform.startswith("win"):
         os.startfile(str(path))  # type: ignore[attr-defined]
-    elif sys.platform == "darwin":
-        os.system(f'open "{path}"')
-    else:
-        os.system(f'xdg-open "{path}" >/dev/null 2>&1 &')
+    else:   # no shell: a quote in a folder name can't inject a command
+        import subprocess
+        subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(path)],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def make_handler(app: App, port: int):
@@ -345,6 +405,14 @@ def make_handler(app: App, port: int):
                     return self._json(list_physical_drives())
                 if u.path == "/api/browse":
                     return self._json(browse(q.get("path", "")))
+                if u.path == "/api/time":
+                    return self._json(app.time_info())
+                if u.path == "/api/dvrs":
+                    st = app.store()
+                    return self._json([st.summary(d) for d in st.all()])
+                if u.path.startswith("/clock/") and u.path.endswith("/report.html") and app.case.get("folder"):
+                    did = Path(unquote(u.path[7:-12])).name
+                    return self._file(Path(app.case["folder"]) / f"clock_report_{did}.html", "text/html; charset=utf-8")
                 if u.path == "/api/runs":
                     return self._json(app.runs())
                 if u.path == "/api/run":
@@ -389,9 +457,48 @@ def make_handler(app: App, port: int):
                 if p == "/api/signatures/test":
                     return self._json(app.test_signature(data.get("signature", {}), data.get("path", ""),
                                                          int(data.get("limit") or 50)))
+                if p == "/api/dvrs":
+                    d = app.store().save_dvr(data)
+                    app.case_log(f"DVR record saved: {d['name']} ({d['id']})")
+                    return self._json(d)
+                if p == "/api/dvrs/delete":
+                    ok = app.store().delete_dvr(data.get("id", ""))
+                    if ok:
+                        app.case_log(f"DVR record deleted: {data.get('id')}")
+                    return self._json({"ok": ok})
+                if p == "/api/dvrs/measure":
+                    if data.get("reference_kind") == "workstation":
+                        data["reference_status"] = app.time_info()["status"]
+                    m = app.store().add_measurement(data.get("dvr_id", ""), data, app.case.get("examiner", ""))
+                    app.case_log(f"Clock measurement for DVR {data.get('dvr_id')}: DVR {m['dvr_time']} / "
+                                 f"reference {m['reference_time']} ({m['reference_source']}) -> {m['offset_text']}")
+                    return self._json(m)
+                if p == "/api/dvrs/measure/delete":
+                    ok = app.store().delete_measurement(data.get("dvr_id", ""), data.get("id", ""))
+                    if ok:
+                        app.case_log(f"Clock measurement {data.get('id')} deleted from DVR {data.get('dvr_id')}")
+                    return self._json({"ok": ok})
+                if p == "/api/clock/convert":
+                    st = app.store()
+                    d = st.get(data.get("dvr_id", ""))
+                    r = convert(d, data.get("time", ""), data.get("direction", "dvr_to_actual"),
+                                use_drift=data.get("use_drift", True))
+                    if data.get("log"):
+                        r = st.log_conversion(d["id"], r, data.get("label", ""))
+                        app.case_log(f"Time conversion ({d['name']}): {data.get('label', '')} DVR {r['dvr_time']} = "
+                                     f"actual {r['actual_time']} [{r['offset_hms']}]")
+                    return self._json(r)
+                if p == "/api/clock/report":
+                    d = app.store().get(data.get("dvr_id", ""))
+                    out = Path(app.case["folder"]) / f"clock_report_{d['id']}.html"
+                    build_clock_report(d, app.case, out)
+                    app.case_log(f"Clock offset worksheet written: {out}")
+                    return self._json({"url": f"/clock/{d['id']}/report.html"})
                 if p == "/api/report":
                     run = Path(app.case["folder"]) / "runs" / Path(data.get("run", "")).name
-                    return self._json({"report": str(build_report(run, app.case, app.evidence_hash))})
+                    sess = json.loads((run / "carve_session.json").read_text(encoding="utf-8"))
+                    h = app.evidence_hash if app.evidence_hash.get("path") == sess["source"]["path"] else {}
+                    return self._json({"report": str(build_report(run, app.case, h))})
                 if p == "/api/open":
                     base = Path(app.case["folder"])
                     run = data.get("run")
@@ -399,7 +506,7 @@ def make_handler(app: App, port: int):
                     open_in_os(target)
                     return self._json({"ok": True})
                 return self._json({"error": "not found"}, 404)
-            except (ValueError, RuntimeError, SourceError, SignatureError, FileExistsError, OSError) as e:
+            except (ValueError, RuntimeError, SourceError, SignatureError, FileExistsError, OSError, ClockError) as e:
                 return self._json({"error": str(e)}, 400)
 
     return H
@@ -407,7 +514,13 @@ def make_handler(app: App, port: int):
 
 def serve(port: int = DEFAULT_PORT, open_browser: bool = True):
     app = App()
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(app, port))
+    try:
+        httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(app, port))
+    except OSError as e:
+        print(f"{APP_NAME} could not start on port {port}: {e.strerror or e}.\n"
+              f"DFX may already be running - open http://127.0.0.1:{port}/ - "
+              f"or start it on another port:  python -m dfx gui --port {port + 2}")
+        return 1
     url = f"http://127.0.0.1:{port}/"
     print(f"{APP_NAME} {__version__} running at {url}  (Ctrl+C to stop)")
     if open_browser:

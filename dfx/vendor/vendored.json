@@ -1,0 +1,45 @@
+{
+  "vendored": [
+    {
+      "path": "ewfprobe.py",
+      "name": "ewfprobe",
+      "version": "0.17.3",
+      "upstream": "https://github.com/abrignoni/ewfprobe",
+      "sha256": "5b799d606bd74bf16ce801c6ccfee8c200c111248d745095d4d61e9fcdba7025",
+      "licence": "MIT",
+      "licence_file": "LICENSE-ewfprobe",
+      "note": "Reads an EnCase/EWF .E01 acquisition without libewf. Copied verbatim; fix upstream and re-vendor rather than editing here.",
+      "copyright": "Copyright (c) 2026 Alexis Brignoni",
+      "notice_in_file": false,
+      "received": "2026-11-26: from Forensic-Media-Extractor fme/vendor (byte-identical; same SHA-256 FME records)",
+      "why": "Reads E01/Ex01 (and AFF, VHD/VHDX, VMDK, QCOW, DMG) acquisitions without libewf, and exposes the acquisition hashes stored in the image. See dfx/source.py."
+    },
+    {
+      "path": "mediacarve.py",
+      "name": "mediacarve",
+      "version": "0.14.1",
+      "upstream": "https://github.com/abrignoni/mediacarve",
+      "sha256": "64716c7751c4f0c0fc2c2b8bb85d1070bb9ea5f3afbcf5b180b6fb383d39a382",
+      "licence": "MIT",
+      "licence_file": "LICENSE-mediacarve",
+      "note": "Copied verbatim from the 0.14.1 release archive. Fix upstream and re-vendor rather than editing here.",
+      "copyright": "Copyright (c) 2026 Alexis Brignoni",
+      "notice_in_file": false,
+      "why": "The length judge for standard containers (MP4/MOV, AVI, MKV/WebM): walks each format's own structure and labels every length header, parsed or capped. A capped length never hides a later file. See dfx/carve/judge.py.",
+      "received": "2026-11-26: from Forensic-Media-Extractor fme/vendor (byte-identical; same SHA-256 FME records)"
+    }
+  ],
+  "derived": [
+    {
+      "name": "GLEAPP (test E01 writer only)",
+      "upstream": "https://github.com/abrignoni/GLEAPP",
+      "licence": "MIT",
+      "licence_file": "LICENSE-gleapp",
+      "copyright": "Copyright (c) 2026 charpy4n6, Alexis Brignoni",
+      "used_in": [
+        "tests/ewfwriter.py"
+      ]
+    }
+  ],
+  "rule": "Copied verbatim. Never edit these files: fix upstream and re-vendor. tests/test_vendor.py fails if a file's SHA-256 changes."
+}

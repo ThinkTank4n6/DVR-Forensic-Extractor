@@ -66,6 +66,28 @@ tr.click{cursor:pointer}
 .btn:hover{filter:brightness(.96)}
 .err{color:var(--bad);margin-top:6px;white-space:pre-wrap}
 .muted{color:var(--muted)}
+/* clock offset */
+.ck{display:grid;grid-template-columns:260px 1fr 1fr;gap:12px;align-items:start}
+.ck .card{margin-bottom:0}
+.dvrlist div.item{border:1px solid var(--line);border-radius:5px;padding:7px 9px;margin-bottom:6px;cursor:pointer;background:#fff}
+.dvrlist div.item.sel{border-color:var(--amber);background:var(--amberbg)}
+.dvrlist .off{font-size:12px;color:var(--muted)}
+.clockbox{background:#f3f5f7;border-radius:8px;padding:12px 14px;margin:8px 0}
+.clockbox .d{font-size:17px;font-weight:600}
+.clockbox .t{font-size:34px;font-weight:700;letter-spacing:.5px;font-variant-numeric:tabular-nums}
+.clockbox .t.ref{color:#2e7d4f}
+.clockbox .t.dvr{color:var(--graphite)}
+.seg{display:flex;background:#e6e9ed;border-radius:16px;padding:2px;margin:6px 0}
+.seg button{flex:1;border:0;background:none;border-radius:14px;padding:5px 8px;cursor:pointer;font-weight:600;color:var(--muted)}
+.seg button.on{background:#fff;color:var(--graphite);box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:5px 0}
+.row input{padding:4px 6px;border:1px solid var(--line);border-radius:3px}
+.pm button{width:34px;height:28px;border:1px solid var(--line);background:#dfe3e8;font-size:16px;cursor:pointer}
+.pm button:first-child{border-radius:14px 0 0 14px}.pm button:last-child{border-radius:0 14px 14px 0}
+.offbig{font-size:18px;font-weight:600;color:var(--graphite)}
+.offbig.fast{color:#b3261e}.offbig.slow{color:#1f5f99}
+.link{color:#1f5f99;cursor:pointer;font-weight:600;background:none;border:0;padding:0;font-size:14px}
+.notes div{background:var(--amberbg);border-left:3px solid var(--amber);padding:5px 8px;margin-top:5px;font-size:12px}
 /* status bar */
 .status{background:var(--graphite);color:#dfe7ee;display:flex;align-items:center;gap:12px;padding:5px 12px;font-size:12px}
 .bar{flex:0 0 260px;height:10px;background:var(--graphite3);border-radius:5px;overflow:hidden}
@@ -91,6 +113,7 @@ tr.click{cursor:pointer}
 </div>
 <div class="tabs" id="tabs">
   <div class="tab active" data-tab="home">Home</div>
+  <div class="tab" data-tab="clock">Clock Offset</div>
   <div class="tab" data-tab="carve">Carve</div>
   <div class="tab" data-tab="sigs">Signatures</div>
   <div class="tab" data-tab="results">Results</div>
@@ -142,6 +165,10 @@ const I={
  folder:'<svg viewBox="0 0 24 24"><path d="M3 6h6l2 2h10v11H3z"/><path d="M3 10h18"/></svg>',
  refresh:'<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg>',
  book:'<svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M8 7h7M8 11h7"/></svg>',
+ clock:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+ save:'<svg viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/></svg>',
+ swap:'<svg viewBox="0 0 24 24"><path d="M4 8h14l-4-4M20 16H6l4 4"/></svg>',
+ live:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7"/></svg>',
  help:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg>',
 };
 const rb=(id,icon,label,primary)=>`<button class="rbtn ${primary?'primary':''}" id="${id}">${I[icon]}<span>${label}</span></button>`;
@@ -152,8 +179,13 @@ function ribbon(){
   const R=$("#ribbon");
   if(TAB==="home") R.innerHTML=
     grp("Case",rb("bNewCase","case","New / Open Case",1)+rb("bCaseFolder","folder","Case Folder"))+
-    grp("Evidence",rb("bImage","file","Image File")+rb("bDrive","drive","Physical Drive")+rb("bHash","hash","Hash Evidence"))+
+    grp("Evidence",rb("bImage","file","Image File")+rb("bDrive","drive","Physical Drive")+rb("bHash","hash","Hash Evidence")+rb("bCancelJob","stop","Cancel Job"))+
     grp("Next",rb("bGoCarve","play","Go to Carve",1))+grp("Help",rb("bManual","book","User Manual"));
+  if(TAB==="clock") R.innerHTML=
+    grp("Recorder",rb("bDvrNew","add","New DVR",1)+rb("bDvrEdit","edit","Edit DVR")+rb("bDvrDel","del","Delete DVR"))+
+    grp("Measure",rb("bMeasure","save","Save Measurement",1)+rb("bDvrFromOffset","clock","New DVR from Offset"))+
+    grp("Convert",rb("bLogConv","swap","Log Conversion")+rb("bLive","live","Live Conversion"))+
+    grp("Report",rb("bClockRep","report","Offset Worksheet",1));
   if(TAB==="carve") R.innerHTML=
     grp("Run",rb("bStart","play","Start Carve",1)+rb("bCancel","stop","Cancel")+rb("bResume","resume","Resume Run"))+
     grp("Options",`<div class="rcol">
@@ -163,7 +195,9 @@ function ribbon(){
      <div class="rcol">
        <label>Start offset <input type="text" id="oStart" value="0"></label>
        <label>End offset <input type="text" id="oEnd" placeholder="end of evidence"></label>
-       <label>Chunk (MB) <input type="number" id="oChunk" value="64" min="1"></label></div>`);
+       <label>Chunk (MB) <input type="number" id="oChunk" value="64" min="1"></label></div>
+     <div class="rcol"><label>DVR clock</label><select id="oDvr" style="width:170px"><option value="">No offset (device times only)</option>${CK.dvrs.filter(d=>d.measurements.length).map(d=>`<option value="${esc(d.id)}">${esc(d.name)} — ${esc(d.current_offset_text||"")}</option>`).join("")}</select>
+       <span class="muted" style="font-size:11px;max-width:170px;white-space:normal">Adds actual (corrected) times to the report</span></div>`);
   if(TAB==="sigs") R.innerHTML=
     grp("Library",rb("bSigNew","add","New",1)+rb("bSigEdit","edit","Edit / Copy")+rb("bSigDel","del","Delete"))+
     grp("Exchange",rb("bSigImp","imp","Import JSON")+rb("bSigExp","exp","Export JSON"))+
@@ -208,6 +242,7 @@ function content(){
     else if(EDIT) $("#sigEditor").innerHTML=`<div class="card"><h2>${esc(EDIT.name)}</h2><pre class="mono" style="font-size:11.5px">${esc(JSON.stringify(strip(EDIT),null,2))}</pre></div>`;
   }
   if(TAB==="results") loadRuns();
+  if(TAB==="clock") renderClock();
   if(TAB==="help"){
     C.innerHTML=`<div class="card"><h2>User Manual</h2><p>The full manual covers every ribbon button, the signature editor, output files, validation and troubleshooting. <button class="btn amber" onclick="window.open('/manual','_blank')">Open User Manual</button></p></div><div class="card"><h2>Carving modes</h2><table>
      <tr><th>header_footer</th><td>From the header to the first (or last) footer within max size.</td></tr>
@@ -292,6 +327,8 @@ async function runTest(sig,path){
   out.innerHTML=`<p class="muted">Testing on ${esc(path)}&hellip;</p>`;
   try{const r=await api("/api/signatures/test",{signature:sig,path,limit:100});
     out.innerHTML=`<h3>Test result: ${r.items.length} item(s), ${r.rejected} rejected hit(s), ${fmt(r.scanned)} scanned</h3>
+     ${r.capped?`<div class="err">Only the first ${fmt(r.scanned)} of ${fmt(r.source_size)} was tested. Run a dry-run carve to check the whole source.</div>`:""}
+     ${r.max_items_hit?`<div class="err">Stopped at ${r.items.length} items.</div>`:""}
      <table><tr><th>#</th><th>Offset</th><th>Length</th><th>Status</th><th>Frames</th><th>Ch</th><th>First</th><th>Last</th><th>Notes</th></tr>
      ${r.items.map(i=>`<tr><td>${i.item_no}</td><td class="mono">${i.start_hex}</td><td>${Number(i.length).toLocaleString()}</td><td>${esc(i.status)}</td><td>${i.frames||""}</td><td>${esc(i.channels)}</td><td>${esc(i.first_time)}</td><td>${esc(i.last_time)}</td><td>${esc(i.notes)}</td></tr>`).join("")}</table>`;
   }catch(e){out.innerHTML=`<div class="err">${esc(e.message)}</div>`}
@@ -307,9 +344,9 @@ async function loadRuns(){
   C.innerHTML=`<div class="card"><h2>Runs</h2><table><tr><th>Run</th><th>Items</th><th>Finished</th><th>State</th></tr>
    ${runs.map(r=>`<tr class="click ${r.name===SELRUN?'sel':''}" data-run="${esc(r.name)}"><td class="mono">${esc(r.name)}</td><td>${r.items??""}</td><td>${esc(r.finished||"")}</td>
      <td>${!r.complete?'<span class="pill n">running / interrupted</span>':r.canceled?'<span class="pill no">canceled - resumable</span>':r.dry_run?'<span class="pill n">dry run</span>':'<span class="pill ok">complete</span>'}</td></tr>`).join("")||"<tr><td colspan=4>No runs yet</td></tr>"}</table></div>
-   <div class="card"><h2>Items ${SELRUN?"&mdash; "+esc(SELRUN):""}</h2><table><tr><th>#</th><th>Signature</th><th>Offset</th><th>Length</th><th>Status</th><th>Frames</th><th>Ch</th><th>First (device)</th><th>Last (device)</th><th>File</th><th>Notes</th></tr>
-   ${items.map(i=>`<tr><td>${i.item_no}</td><td>${esc(i.signature_name)}</td><td class="mono">${esc(i.start_hex)}</td><td>${Number(i.length).toLocaleString()}</td><td>${esc(i.status)}</td>
-     <td>${i.frames!=="0"?esc(i.frames):""}</td><td>${esc(i.channels)}</td><td>${esc(i.first_time)}</td><td>${esc(i.last_time)}</td><td class="mono" style="font-size:11px">${esc(i.file)}</td><td>${esc(i.notes)}</td></tr>`).join("")||"<tr><td colspan=11>No items</td></tr>"}</table></div>`;
+   <div class="card"><h2>Items ${SELRUN?"&mdash; "+esc(SELRUN):""}</h2><table><tr><th>#</th><th>Signature</th><th>Offset</th><th>Length</th><th>Length is</th><th>Status</th><th>Frames</th><th>Ch</th><th>First (device)</th><th>Last (device)</th><th>File</th><th>Notes</th></tr>
+   ${items.map(i=>`<tr><td>${i.item_no}</td><td>${esc(i.signature_name)}</td><td class="mono">${esc(i.start_hex)}</td><td>${Number(i.length).toLocaleString()}</td><td>${esc(i.bounded||"")}</td><td>${esc(i.status)}</td>
+     <td>${i.frames!=="0"?esc(i.frames):""}</td><td>${esc(i.channels)}</td><td>${esc(i.first_time)}</td><td>${esc(i.last_time)}</td><td class="mono" style="font-size:11px">${esc(i.file)}</td><td>${esc(i.notes)}</td></tr>`).join("")||"<tr><td colspan=12>No items</td></tr>"}</table></div>`;
   C.querySelectorAll("tr[data-run]").forEach(tr=>tr.onclick=()=>{SELRUN=tr.dataset.run;loadRuns()});
 }
 
@@ -375,13 +412,17 @@ function wire(){
   on("bGoCarve",()=>setTab("carve"));
   const carveBody=()=>({signature_ids:[...document.querySelectorAll(".cs:checked")].map(x=>x.value),
     dry_run:$("#oDry").checked,aligned:$("#oAlign").checked,max_items:Number($("#oMax").value||0),
-    start:parseOff($("#oStart").value),end:parseOff($("#oEnd").value),chunk_mb:Number($("#oChunk").value||64)});
-  on("bStart",async()=>{try{const r=await api("/api/carve",carveBody());SELRUN=r.run}catch(e){alert(e.message)}});
+    start:parseOff($("#oStart").value),end:parseOff($("#oEnd").value),chunk_mb:Number($("#oChunk").value||64),dvr_id:($("#oDvr")||{}).value||""});
+  on("bStart",async()=>{
+    const h=S.evidence_hash||{};
+    if(!h.sha256&&!confirm("The evidence has not been hashed in DFX. The report will say so.\n\nStart the carve anyway?"))return;
+    try{const r=await api("/api/carve",carveBody());SELRUN=r.run}catch(e){alert(e.message)}});
   on("bCancel",()=>api("/api/cancel",{}));
+  on("bCancelJob",()=>{if(!(S.job&&S.job.running))return alert("No job is running.");api("/api/cancel",{})});
   on("bResume",async()=>{
     const runs=(await api("/api/runs")).filter(r=>!r.complete||r.canceled);
     if(!runs.length)return alert("No canceled or interrupted runs to resume.");
-    modal("Resume a run",`<p>Resume uses the same signatures and options; the scan continues from its last checkpoint.</p>`+
+    modal("Resume a run",`<p>Resume uses the run's <b>original</b> signatures and options (the options on the ribbon are ignored); the scan continues from its last checkpoint.</p>`+
       runs.map(r=>`<div class="blist"><div data-r="${esc(r.name)}" class="d">${esc(r.name)}</div></div>`).join(""),[["Cancel",closeModal]]);
     $("#mBody").querySelectorAll("[data-r]").forEach(e=>e.onclick=async()=>{closeModal();
       try{const b=carveBody();b.resume_run=e.dataset.r;await api("/api/carve",b)}catch(x){alert(x.message)}});
@@ -397,6 +438,17 @@ function wire(){
       for(const s of d){try{s.validated=false;await api("/api/signatures",s);n++}catch(e){errs.push((s.id||"?")+": "+e.message)}}
       await loadSigs();content();alert(`Imported ${n} signature(s) as unvalidated.`+(errs.length?"\n\nProblems:\n"+errs.join("\n"):""))}catch(e){alert(e.message)}};i.click()});
   on("bSigTest",()=>{if(!EDIT)return alert("Select a signature first.");if(!EDIT._editing){EDIT={...EDIT,_editing:1};content()}pickFile("Test signature on a sample file",p=>runTest(readEditor(),p))});
+  on("bDvrNew",()=>dvrDialog(null));
+  on("bDvrEdit",()=>{const d=selDvr();if(!d)return alert("Select a DVR first.");dvrDialog(d)});
+  on("bDvrDel",async()=>{const d=selDvr();if(!d)return alert("Select a DVR first.");
+    if(!confirm(`Delete DVR "${d.name}" and its ${d.measurements.length} measurement(s)? This is recorded in the case log.`))return;
+    await api("/api/dvrs/delete",{id:d.id});CK.sel=null;await loadDvrs();renderClock()});
+  on("bMeasure",saveMeasurement);
+  on("bDvrFromOffset",()=>{if(dvrNow()===null)return alert("Set the time shown on the DVR first.");dvrDialog(null,true)});
+  on("bLogConv",logConversion);
+  on("bLive",()=>{CK.live=!CK.live;renderClock()});
+  on("bClockRep",async()=>{const d=selDvr();if(!d)return alert("Select a DVR first.");
+    try{const r=await api("/api/clock/report",{dvr_id:d.id});window.open(r.url,"_blank")}catch(e){alert(e.message)}});
   on("bRefresh",loadRuns);
   on("bReport",()=>{if(!SELRUN)return alert("Select a run.");window.open("/runs/"+encodeURIComponent(SELRUN)+"/report.html","_blank")});
   on("bRebuild",async()=>{if(!SELRUN)return alert("Select a run.");try{await api("/api/report",{run:SELRUN});window.open("/runs/"+encodeURIComponent(SELRUN)+"/report.html","_blank")}catch(e){alert(e.message)}});
@@ -405,8 +457,182 @@ function wire(){
   on("bAbout",()=>modal("About",`<p><b>DVR Forensic Extractor</b> ${esc(S.version)}</p><p>Copyright (c) 2026 Christopher A. Tankelewicz (ThinkTank4n6). MIT License.</p><p><b>Early development build &mdash; not yet tested on real DVR evidence. Do not use for casework.</b></p><p class="muted">Provided without warranty. Validate every signature and every release against known test data before relying on results.</p>`,[["Close",closeModal,"amber"]]));
 }
 function parseOff(v){v=(v||"").trim();if(!v)return 0;return v.toLowerCase().startsWith("0x")?parseInt(v,16):Number(v.replace(/,/g,""))}
-function setTab(t){TAB=t;document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===t));ribbon();content()}
+async function setTab(t){if(t==="clock"||t==="carve"){await loadDvrs();if(t==="clock")await loadTimeStatus()}TAB=t;document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===t));ribbon();content()}
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>setTab(t.dataset.tab));
+
+
+/* ---------------- clock offset ---------------- */
+const CK={dvrs:[],sel:null,dvrMs:null,perf0:0,paused:false,pausedMs:0,refKind:"workstation",extMs:null,extPerf:0,extSource:"",
+  incMode:"actual",incVal:null,live:false,status:{},conv:null,liveOff:null,liveAt:0};
+const p2=n=>String(n).padStart(2,"0");
+function naiveNow(){const d=new Date();return Date.UTC(d.getFullYear(),d.getMonth(),d.getDate(),d.getHours(),d.getMinutes(),d.getSeconds(),d.getMilliseconds())}
+function nfmt(ms){const d=new Date(ms);return `${d.getUTCFullYear()}-${p2(d.getUTCMonth()+1)}-${p2(d.getUTCDate())} ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}:${p2(d.getUTCSeconds())}`}
+function ndate(ms){const d=new Date(ms);return `${p2(d.getUTCMonth()+1)}/${p2(d.getUTCDate())}/${d.getUTCFullYear()}`}
+function ntime(ms){const d=new Date(ms);let h=d.getUTCHours();const ap=h<12?"AM":"PM";h=h%12||12;return `${p2(h)}:${p2(d.getUTCMinutes())}:${p2(d.getUTCSeconds())} ${ap}`}
+function nparse(date,time){if(!date||!time)return null;const [y,m,d]=date.split("-").map(Number);const t=time.split(":").map(Number);return Date.UTC(y,m-1,d,t[0]||0,t[1]||0,t[2]||0)}
+const trunc=ms=>Math.floor(ms/1000)*1000;
+function dvrNow(){if(CK.dvrMs===null)return null;return CK.paused?CK.pausedMs:CK.dvrMs+(performance.now()-CK.perf0)}
+function refNow(){if(CK.refKind==="workstation")return naiveNow();if(CK.extMs===null)return null;return CK.extMs+(performance.now()-CK.extPerf)}
+function quickOffset(){const a=dvrNow(),b=refNow();if(a===null||b===null)return null;return Math.round((trunc(a)-trunc(b))/1000)}
+function offText(s){if(s===null)return "Set both clocks";if(s===0)return "Time is exact";const a=Math.abs(s),h=Math.floor(a/3600),m=Math.floor(a%3600/60),x=a%60;
+  return `DVR is ${h?h+" h ":""}${m?m+" min ":""}${x||(!h&&!m)?x+" s ":""}${s>0?"fast (ahead)":"slow (behind)"}`}
+function hms(s){const a=Math.abs(s);return (s<0?"-":"+")+p2(Math.floor(a/3600))+":"+p2(Math.floor(a%3600/60))+":"+p2(a%60)}
+const selDvr=()=>CK.dvrs.find(d=>d.id===CK.sel)||null;
+async function loadDvrs(){try{CK.dvrs=S.case&&S.case.folder?await api("/api/dvrs"):[]}catch(e){CK.dvrs=[]}}
+async function loadTimeStatus(){try{CK.status=(await api("/api/time")).status||{}}catch(e){}}
+
+function renderClock(){
+  const C=$("#content");
+  if(!S.case||!S.case.folder){C.innerHTML=`<div class="card">Open a case first (Home &rarr; New / Open Case). DVR records and measurements are saved in the case.</div>`;return}
+  const d=selDvr();
+  const st=CK.status||{};
+  C.innerHTML=`<div class="ck">
+   <div class="card"><h2>Recorders</h2><div class="dvrlist">${CK.dvrs.map(x=>`<div class="item ${x.id===CK.sel?'sel':''}" data-id="${esc(x.id)}"><b>${esc(x.name)}</b><div class="off">${esc([x.make,x.model].filter(Boolean).join(" "))}</div><div class="off">${esc(x.current_offset_text||"no measurement")}${x.drift?` · drift ${x.drift.rate_s_per_day>=0?"+":""}${x.drift.rate_s_per_day.toFixed(2)} s/day`:""}</div></div>`).join("")||'<p class="muted">No DVRs yet. Use <b>New DVR</b>, or set the clocks and use <b>New DVR from Offset</b>.</p>'}</div></div>
+
+   <div>
+    <div class="card"><h2>Time shown on DVR</h2><div class="muted">Running DVR clock &mdash; enter what the recorder's screen shows, then press Set.</div>
+     <div class="clockbox"><div class="d" id="ckDvrD">--/--/----</div><div class="t dvr" id="ckDvrT">--:--:-- --</div></div>
+     <div class="row"><input type="date" id="ckDvrDate"><input type="time" step="1" id="ckDvrTime"><button class="btn amber" id="ckSet">Set</button><button class="btn" id="ckFromRef" title="Start from the reference time, then adjust">Copy reference</button></div>
+     <div class="row"><span class="pm"><button id="ckMinus" title="DVR -1 s">&minus;</button><button id="ckPlus" title="DVR +1 s">+</button></span><button class="btn" id="ckPause">${CK.paused?"Resume":"Pause"}</button><span class="muted">Pause the moment the DVR screen changes second, adjust, then resume.</span></div>
+    </div>
+
+    <div class="card" style="margin-top:12px"><h2>Reference time</h2>
+     <div class="seg"><button id="ckRefW" class="${CK.refKind==="workstation"?"on":""}">Workstation Clock</button><button id="ckRefE" class="${CK.refKind==="external"?"on":""}">External Clock</button></div>
+     ${CK.refKind==="workstation"?`<div class="muted">Live workstation clock${st.sync_source?` &mdash; synced to <b>${esc(st.sync_source)}</b>${st.last_sync?`, last sync ${esc(st.last_sync)}`:""}`:" &mdash; sync source not available (check Windows Time)"}</div>`
+       :`<div class="row"><input type="date" id="ckExtDate"><input type="time" step="1" id="ckExtTime"><button class="btn amber" id="ckExtSet">Set</button></div>
+         <div class="row"><input id="ckExtSrc" style="flex:1" placeholder="Source, e.g. time.gov, GPS clock, phone (NTP)" value="${esc(CK.extSource)}"></div>`}
+     <div class="clockbox"><div class="d" id="ckRefD">--/--/----</div><div class="t ref" id="ckRefT">--:--:-- --</div></div>
+     <h3 style="margin:10px 0 2px">Offset</h3><div class="offbig" id="ckOff">Set both clocks</div><div class="mono muted" id="ckOffHms"></div>
+     <div class="row" style="margin-top:8px"><input id="ckMNotes" style="flex:1" placeholder="Measurement notes (how the DVR time was read, photo number...)"></div>
+     <div class="row">${d?`<button class="btn amber" id="ckSave">Save measurement to “${esc(d.name)}”</button>`:""}<button class="link" id="ckNewFrom">Create New DVR using current offset</button></div>
+    </div>
+   </div>
+
+   <div>
+    <div class="card"><h2>Incident time</h2>
+     <div class="muted">${d&&d.measurements.length?`Using saved measurements for <b>${esc(d.name)}</b>${d.drift?" (with drift)":""}.`:`Using the live offset (not saved). Select a DVR with measurements for a logged, reportable conversion.`}</div>
+     <div class="seg"><button id="ckIA" class="${CK.incMode==="actual"?"on":""}">Actual</button><button id="ckID" class="${CK.incMode==="dvr"?"on":""}">DVR</button></div>
+     <div class="row"><input type="date" id="ckIncDate"><input type="time" step="1" id="ckIncTime"><span class="pm"><button id="ckIMinus">&minus;</button><button id="ckIPlus">+</button></span></div>
+     <div class="clockbox"><div class="muted" id="ckIncLbl">${CK.incMode==="actual"?"DVR time":"Actual time"}</div><div class="d" id="ckIncOut" style="font-size:20px">&mdash;</div><div class="mono muted" id="ckIncOff"></div></div>
+     <div class="notes" id="ckIncNotes"></div>
+     <div class="row"><input id="ckLabel" style="flex:1" placeholder="Event label, e.g. Suspect enters store"><button class="btn" id="ckLog">Log</button></div>
+    </div>
+    ${CK.live?`<div class="card" style="margin-top:12px"><h2>Live conversion</h2><div class="muted" id="ckLiveSrc"></div>
+      <div class="clockbox"><div class="muted">Actual (workstation)</div><div class="t ref" id="ckLA" style="font-size:26px"></div></div>
+      <div class="clockbox"><div class="muted">On the DVR right now</div><div class="t dvr" id="ckLD" style="font-size:26px"></div></div></div>`:""}
+   </div>
+  </div>
+  ${d?`<div class="card" style="margin-top:12px"><h2>Measurements &mdash; ${esc(d.name)}</h2>
+    <table><tr><th>DVR time</th><th>Reference time</th><th>Offset</th><th>Source</th><th>Examiner</th><th>Recorded</th><th>Notes</th><th></th></tr>
+    ${d.measurements.map(m=>`<tr><td class="mono">${esc(m.dvr_time)}</td><td class="mono">${esc(m.reference_time)}</td><td>${esc(m.offset_text)}</td><td>${esc(m.reference_source)}</td><td>${esc(m.examiner)}</td><td>${esc(m.recorded)}</td><td>${esc(m.notes)}</td><td><button class="btn" data-delm="${esc(m.id)}">Delete</button></td></tr>`).join("")||'<tr><td colspan=8 class="muted">None yet</td></tr>'}</table>
+    ${d.drift?`<p>Drift: <b>${d.drift.rate_s_per_day>=0?"+":""}${d.drift.rate_s_per_day.toFixed(3)} s/day</b> over ${d.drift.points} measurements (${esc(d.drift.first)} to ${esc(d.drift.last)}).</p>`:d.measurements.length===1?'<p class="muted">Take a second measurement days later to measure drift.</p>':""}
+    <h2 style="margin-top:14px">Logged conversions</h2>
+    <table><tr><th>Event</th><th>DVR time</th><th>Actual time</th><th>Offset</th><th>Recorded</th></tr>
+    ${(d.conversions||[]).map(c=>`<tr><td>${esc(c.label)}</td><td class="mono">${esc(c.dvr_time)}</td><td class="mono"><b>${esc(c.actual_time)}</b></td><td class="mono">${esc(c.offset_hms)}</td><td>${esc(c.recorded)}</td></tr>`).join("")||'<tr><td colspan=5 class="muted">None yet</td></tr>'}</table></div>`:""}`;
+
+  C.querySelectorAll(".dvrlist .item").forEach(el=>el.onclick=()=>{CK.sel=el.dataset.id;CK.liveAt=0;renderClock()});
+  C.querySelectorAll("[data-delm]").forEach(b=>b.onclick=async()=>{if(!confirm("Delete this measurement? This is recorded in the case log."))return;
+    await api("/api/dvrs/measure/delete",{dvr_id:CK.sel,id:b.dataset.delm});await loadDvrs();renderClock()});
+  const setInputs=(di,ti,ms)=>{const f=nfmt(ms);$(di).value=f.slice(0,10);$(ti).value=f.slice(11)};
+  if(dvrNow()!==null)setInputs("#ckDvrDate","#ckDvrTime",dvrNow());
+  $("#ckSet").onclick=()=>{const v=nparse($("#ckDvrDate").value,$("#ckDvrTime").value);if(v===null)return alert("Enter the DVR date and time.");CK.dvrMs=v;CK.perf0=performance.now();CK.paused=false;$("#ckPause").textContent="Pause"};
+  $("#ckFromRef").onclick=()=>{const r=refNow();if(r===null)return alert("Set the reference clock first.");CK.dvrMs=trunc(r);CK.perf0=performance.now()-(r-trunc(r));CK.paused=false;setInputs("#ckDvrDate","#ckDvrTime",CK.dvrMs)};
+  const nudge=n=>{if(CK.dvrMs===null)return;if(CK.paused)CK.pausedMs+=n*1000;else CK.dvrMs+=n*1000;setInputs("#ckDvrDate","#ckDvrTime",dvrNow())};
+  $("#ckMinus").onclick=()=>nudge(-1);$("#ckPlus").onclick=()=>nudge(1);
+  $("#ckPause").onclick=()=>{if(CK.dvrMs===null)return;if(!CK.paused){CK.pausedMs=dvrNow();CK.paused=true;$("#ckPause").textContent="Resume"}else{CK.dvrMs=CK.pausedMs;CK.perf0=performance.now();CK.paused=false;$("#ckPause").textContent="Pause"}};
+  $("#ckRefW").onclick=()=>{CK.refKind="workstation";renderClock()};
+  $("#ckRefE").onclick=()=>{CK.refKind="external";renderClock()};
+  if(CK.refKind==="external"){
+    if(CK.extMs!==null)setInputs("#ckExtDate","#ckExtTime",refNow());
+    $("#ckExtSet").onclick=()=>{const v=nparse($("#ckExtDate").value,$("#ckExtTime").value);if(v===null)return alert("Enter the reference date and time.");CK.extMs=v;CK.extPerf=performance.now()};
+    $("#ckExtSrc").oninput=e=>CK.extSource=e.target.value;
+  }
+  if($("#ckSave"))$("#ckSave").onclick=saveMeasurement;
+  $("#ckNewFrom").onclick=()=>{if(quickOffset()===null)return alert("Set the time shown on the DVR (and the external clock, if used) first.");dvrDialog(null,true)};
+  $("#ckIA").onclick=()=>{CK.incMode="actual";renderClock()};
+  $("#ckID").onclick=()=>{CK.incMode="dvr";renderClock()};
+  if(CK.incVal===null)CK.incVal=trunc(naiveNow());
+  setInputs("#ckIncDate","#ckIncTime",CK.incVal);
+  const incChanged=()=>{const v=nparse($("#ckIncDate").value,$("#ckIncTime").value);if(v!==null){CK.incVal=v;updateIncident()}};
+  $("#ckIncDate").onchange=incChanged;$("#ckIncTime").onchange=incChanged;
+  $("#ckIMinus").onclick=()=>{CK.incVal-=1000;setInputs("#ckIncDate","#ckIncTime",CK.incVal);updateIncident()};
+  $("#ckIPlus").onclick=()=>{CK.incVal+=1000;setInputs("#ckIncDate","#ckIncTime",CK.incVal);updateIncident()};
+  $("#ckLog").onclick=logConversion;
+  updateIncident();tickClock();
+}
+let incTimer=null;
+function updateIncident(){
+  clearTimeout(incTimer);
+  incTimer=setTimeout(async()=>{
+    const d=selDvr(),out=$("#ckIncOut");if(!out)return;
+    const dir=CK.incMode==="actual"?"actual_to_dvr":"dvr_to_actual";
+    if(d&&d.measurements.length){
+      try{const r=await api("/api/clock/convert",{dvr_id:d.id,time:nfmt(CK.incVal),direction:dir});CK.conv=r;
+        out.textContent=dir==="actual_to_dvr"?r.dvr_time:r.actual_time;$("#ckIncOff").textContent=`${r.offset_hms} · ${r.method}`;
+        $("#ckIncNotes").innerHTML=r.notes.map(n=>`<div>${esc(n)}</div>`).join("")}
+      catch(e){out.textContent="—";$("#ckIncNotes").innerHTML=`<div>${esc(e.message)}</div>`}
+    }else{
+      const o=quickOffset();CK.conv=null;
+      if(o===null){out.textContent="—";$("#ckIncOff").textContent="Set the DVR clock first";$("#ckIncNotes").innerHTML="";return}
+      const r=dir==="actual_to_dvr"?CK.incVal+o*1000:CK.incVal-o*1000;
+      out.textContent=nfmt(r);$("#ckIncOff").textContent=`${hms(o)} · live offset (unsaved)`;
+      $("#ckIncNotes").innerHTML="<div>Unsaved live offset: save the measurement to a DVR to log this conversion and include drift and daylight-saving checks.</div>";
+    }
+  },150);
+}
+function tickClock(){
+  if(TAB!=="clock"||!$("#ckDvrT"))return;
+  const a=dvrNow(),b=refNow();
+  $("#ckDvrD").textContent=a===null?"--/--/----":ndate(a);$("#ckDvrT").textContent=a===null?"--:--:-- --":ntime(a);
+  $("#ckRefD").textContent=b===null?"--/--/----":ndate(b);$("#ckRefT").textContent=b===null?"--:--:-- --":ntime(b);
+  const o=quickOffset();const el=$("#ckOff");el.textContent=offText(o);el.className="offbig"+(o>0?" fast":o<0?" slow":"");
+  $("#ckOffHms").textContent=o===null?"":hms(o)+"  (DVR − reference)";
+  if(CK.live&&$("#ckLA")){
+    const d=selDvr(),now=trunc(naiveNow());
+    if(d&&d.measurements.length&&Date.now()-CK.liveAt>30000){CK.liveAt=Date.now();
+      api("/api/clock/convert",{dvr_id:d.id,time:nfmt(now),direction:"actual_to_dvr"}).then(r=>{CK.liveOff=r.offset_s;$("#ckLiveSrc").textContent=`${d.name}: ${r.offset_text} (${r.method})`}).catch(()=>{})}
+    const off=d&&d.measurements.length?CK.liveOff:quickOffset();
+    if(!(d&&d.measurements.length))$("#ckLiveSrc").textContent="Live (unsaved) offset";
+    $("#ckLA").textContent=ndate(now)+"  "+ntime(now);
+    $("#ckLD").textContent=off===null||off===undefined?"—":ndate(now+Math.round(off)*1000)+"  "+ntime(now+Math.round(off)*1000);
+  }
+  requestAnimationFrame(()=>setTimeout(tickClock,200));
+}
+function captureMeasurement(){
+  const a=dvrNow(),b=refNow();if(a===null)throw new Error("Set the time shown on the DVR first.");if(b===null)throw new Error("Set the external reference clock first.");
+  const ref=trunc(b),off=Math.round((trunc(a)-ref)/1000);
+  return {dvr_time:nfmt(ref+off*1000),reference_time:nfmt(ref),
+    reference_kind:CK.refKind,reference_source:CK.refKind==="workstation"?`Workstation clock${CK.status.sync_source?" (synced to "+CK.status.sync_source+")":""}`:(CK.extSource||"External clock"),
+    method:"Running DVR clock set from the recorder display in DFX Clock Offset",notes:($("#ckMNotes")||{}).value||""};
+}
+async function saveMeasurement(){
+  const d=selDvr();if(!d)return alert("Select a DVR (or create one) first.");
+  try{const m=captureMeasurement();m.dvr_id=d.id;const r=await api("/api/dvrs/measure",m);await loadDvrs();renderClock();
+    alert(`Saved: ${r.offset_text}\nDVR ${r.dvr_time}  /  reference ${r.reference_time}`)}catch(e){alert(e.message)}
+}
+async function logConversion(){
+  const d=selDvr();if(!d||!d.measurements.length)return alert("Select a DVR with at least one saved measurement to log a conversion.");
+  const label=($("#ckLabel")||{}).value||"";
+  try{await api("/api/clock/convert",{dvr_id:d.id,time:nfmt(CK.incVal),direction:CK.incMode==="actual"?"actual_to_dvr":"dvr_to_actual",log:true,label});
+    await loadDvrs();renderClock()}catch(e){alert(e.message)}
+}
+function dvrDialog(d,withOffset){
+  d=d||{};
+  modal(d.id?"Edit DVR":"New DVR",`<div class="form">
+   <label>Name</label><input id="dN" value="${esc(d.name||"")}" placeholder="e.g. Sunoco - office NVR">
+   <label>Location</label><input id="dL" value="${esc(d.location||"")}">
+   <label>Make</label><input id="dMk" value="${esc(d.make||"")}">
+   <label>Model</label><input id="dMo" value="${esc(d.model||"")}">
+   <label>Serial</label><input id="dS" value="${esc(d.serial||"")}">
+   <label>Channels</label><input id="dC" value="${esc(d.channels||"")}">
+   <label>DST setting</label><select id="dDst">${["","Auto DST on","Auto DST off","Unknown"].map(v=>`<option ${v===(d.dst_setting||"")?"selected":""}>${v}</option>`).join("")}</select>
+   <label>Notes</label><textarea id="dNo" rows="2">${esc(d.notes||"")}</textarea></div>
+   ${withOffset?`<p>The current offset (<b>${esc(offText(quickOffset()))}</b>) will be saved as this DVR's first measurement.</p>`:""}<div class="err" id="dErr"></div>`,
+   [["Cancel",closeModal],["Save",async()=>{
+     try{const m=withOffset?captureMeasurement():null;const r=await api("/api/dvrs",{id:d.id,name:$("#dN").value,location:$("#dL").value,make:$("#dMk").value,model:$("#dMo").value,serial:$("#dS").value,channels:$("#dC").value,dst_setting:$("#dDst").value,notes:$("#dNo").value});
+       if(m){m.dvr_id=r.id;await api("/api/dvrs/measure",m)}
+       CK.sel=r.id;closeModal();await loadDvrs();renderClock()}catch(e){$("#dErr").textContent=e.message}},"amber"]]);
+}
 
 /* ---------------- state polling ---------------- */
 function side(){

@@ -5,7 +5,8 @@ Every source is opened read-only. Supported:
   * split raw images (.001, .002, ...)
   * Windows physical drives  (\\\\.\\PhysicalDriveN)  - needs Administrator;
     reads are sector-aligned because Windows refuses unaligned raw reads
-  * E01 / Ex01 when the optional `libewf-python` (pyewf) package is installed
+  * E01 / Ex01 (and AFF, VHD/VHDX, VMDK, QCOW, Apple DMG) through the vendored
+    ewfprobe reader - nothing extra to install
 
 Nothing in this module can write to evidence.
 """
@@ -32,6 +33,20 @@ class Source:
 
     def read_at(self, offset: int, length: int) -> bytes:  # pragma: no cover
         raise NotImplementedError
+
+    def read_full(self, offset: int, length: int) -> bytes:
+        """read_at that keeps reading until `length` bytes or end of source/data."""
+        length = max(0, min(length, self.size - offset))
+        first = self.read_at(offset, length)
+        if len(first) >= length or not first:
+            return first                     # normal case: one read, no extra copy
+        out = bytearray(first)
+        while len(out) < length:
+            b = self.read_at(offset + len(out), length - len(out))
+            if not b:
+                break
+            out += b
+        return bytes(out)
 
     def close(self) -> None:
         pass
@@ -140,6 +155,7 @@ class PhysicalDriveSource(Source):
         ok = k32.DeviceIoControl(h, 0x7405C, None, 0, ctypes.byref(length),
                                  ctypes.sizeof(length), ctypes.byref(ret), None)
         if not ok:
+            k32.CloseHandle(h)   # don't leak the drive handle
             raise SourceError(f"cannot read size of {path}")
         self.size = length.value
 
@@ -190,31 +206,44 @@ def list_physical_drives() -> list[dict]:
 
 # ------------------------------------------------------------------------ E01
 class EwfSource(Source):
+    """E01/Ex01 (and AFF, VHD/VHDX, VMDK, QCOW, Apple DMG) through the vendored
+    ewfprobe reader - no libewf needed. Exposes the acquisition hashes stored
+    in the image so DFX can compare them with its own."""
     kind = "e01"
 
     def __init__(self, path: str):
+        from . import vendored
+        ewf = vendored.ewfprobe()
         try:
-            import pyewf  # type: ignore
-        except ImportError as e:
-            raise SourceError("E01 support needs the optional package libewf-python "
-                              "(pip install libewf-python)") from e
+            self._img = ewf.open_ewf(path)
+        except ewf.EwfPasswordRequiredError as e:
+            raise SourceError(f"{Path(path).name} is encrypted; DFX can't open encrypted images yet "
+                              f"(needs {getattr(e, 'needs', 'a password')}). Decrypt or convert it first.") from e
+        except (ewf.EwfError, OSError, ValueError) as e:
+            raise SourceError(f"cannot open {path}: {e}") from e
         self.path = path
-        files = pyewf.glob(path)
-        self._h = pyewf.handle()
-        self._h.open(files)
-        self.size = self._h.get_media_size()
-        try:
-            self.sector_size = self._h.get_bytes_per_sector()
-        except Exception:
-            pass
+        self.size = int(self._img.media_size)
+        self.sector_size = int(getattr(self._img, "sector_size", 0) or 512)
+        self.stored_hashes = {k.upper(): v.lower() for k, v in (self._img.stored_hashes or {}).items()}
+        self.reader = f"ewfprobe {getattr(ewf, '__version__', '')}".strip()
 
     def read_at(self, offset: int, length: int) -> bytes:
         if offset >= self.size or length <= 0:
             return b""
-        return self._h.read_buffer_at_offset(min(length, self.size - offset), offset)
+        self._img.seek(offset)
+        return self._img.read(min(length, self.size - offset))
+
+    def describe(self) -> dict:
+        d = super().describe()
+        d["stored_hashes"] = self.stored_hashes
+        d["reader"] = self.reader
+        return d
 
     def close(self):
-        self._h.close()
+        try:
+            self._img.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 # --------------------------------------------------------------------- factory
@@ -226,8 +255,11 @@ def open_source(path: str) -> Source:
         raise SourceError(f"not found: {path}")
     if p.is_dir():
         raise SourceError(f"{path} is a folder; choose an image file or drive")
+    if re.fullmatch(r"\.e\d{2}", p.suffix.lower()) and p.suffix.lower() != ".e01":
+        raise SourceError(f"{p.name} is a later segment; open the .E01 file of the set")
     suf = p.suffix.lower()
-    if suf in (".e01", ".ex01"):
+    from . import vendored
+    if suf in (".e01", ".ex01") or vendored.ewfprobe().is_image(path):
         return EwfSource(path)
     if re.fullmatch(r"\.\d{3}", suf):
         return SplitRawSource(path)
@@ -235,9 +267,11 @@ def open_source(path: str) -> Source:
 
 
 def hash_source(src: Source, chunk: int = 32 * 1024 * 1024, progress=None,
-                cancel=None) -> dict:
-    """MD5 + SHA-256 of the whole source."""
+                cancel=None, sha1: bool = False) -> dict:
+    """MD5 + SHA-256 of the whole source (+ SHA-1 when asked, to compare with a
+    SHA-1 an E01 stores)."""
     md5, sha = hashlib.md5(), hashlib.sha256()
+    s1 = hashlib.sha1() if sha1 else None
     off = 0
     while off < src.size:
         if cancel and cancel():
@@ -247,7 +281,12 @@ def hash_source(src: Source, chunk: int = 32 * 1024 * 1024, progress=None,
             break
         md5.update(b)
         sha.update(b)
+        if s1:
+            s1.update(b)
         off += len(b)
         if progress:
             progress(off, src.size)
-    return {"md5": md5.hexdigest(), "sha256": sha.hexdigest(), "bytes": off}
+    out = {"md5": md5.hexdigest(), "sha256": sha.hexdigest(), "bytes": off}
+    if s1:
+        out["sha1"] = s1.hexdigest()
+    return out

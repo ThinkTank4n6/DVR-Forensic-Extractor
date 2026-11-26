@@ -21,6 +21,8 @@ A signature is a JSON object. Fields:
   chain_max_gap    frame_chain: bytes allowed between frames (0 = back-to-back)
   channel_field    {offset, size}                    recorded per frame (frame_chain)
   timestamp_field  {offset, size, endian, format}    format: unix | dahua_packed | filetime
+  judge            "mediacarve" = let the vendored mediacarve decide where a standard
+                   container (MP4/MOV, AVI, MKV/WebM) ends; the mode is the fallback
   validated        set true only after the signature passed your validation tests
   notes            free text (where it came from, what it was tested against)
 
@@ -57,6 +59,7 @@ DEFAULTS = {
     "validated": False,
     "notes": "",
     "extension": "bin",
+    "judge": "",
 }
 
 
@@ -158,6 +161,8 @@ def check(sig: dict) -> list[str]:
     tf = s.get("timestamp_field")
     if tf and tf.get("format") not in TS_FORMATS:
         errs.append(f"timestamp_field.format must be one of {', '.join(TS_FORMATS)}")
+    if s.get("judge") not in ("", None, "mediacarve"):
+        errs.append("judge must be empty or mediacarve")
     if not re.fullmatch(r"[A-Za-z0-9]{1,10}", str(s.get("extension", ""))):
         errs.append("extension must be 1-10 letters/digits")
     return errs

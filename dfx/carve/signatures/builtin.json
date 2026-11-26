@@ -8,7 +8,8 @@
     "mode": "box_walk",
     "min_size": 64,
     "max_size": 17179869184,
-    "notes": "Length from walking top-level boxes (ftyp, moov, mdat ...). Items with no moov box are flagged as incomplete."
+    "notes": "Length from walking top-level boxes (ftyp, moov, mdat ...). Items with no moov box are flagged as incomplete. Length judged by mediacarve (header/parsed/capped); the mode is the fallback.",
+    "judge": "mediacarve"
   },
   {
     "id": "avi-riff",
@@ -16,10 +17,17 @@
     "extension": "avi",
     "header": "52 49 46 46 ?? ?? ?? ?? 41 56 49 20",
     "mode": "header_length",
-    "length_field": {"offset": 4, "size": 4, "endian": "little", "adjust": 8, "multiplier": 1},
+    "length_field": {
+      "offset": 4,
+      "size": 4,
+      "endian": "little",
+      "adjust": 8,
+      "multiplier": 1
+    },
     "min_size": 256,
     "max_size": 4294967303,
-    "notes": "RIFF chunk size + 8. OpenDML (AVIX) continuation chunks over 1 GB are separate RIFF chunks and are not joined in this build."
+    "notes": "RIFF chunk size + 8. OpenDML (AVIX) continuation chunks over 1 GB are separate RIFF chunks and are not joined in this build. Length judged by mediacarve (header/parsed/capped); the mode is the fallback.",
+    "judge": "mediacarve"
   },
   {
     "id": "mkv-ebml",
@@ -29,7 +37,8 @@
     "mode": "header_maxsize",
     "min_size": 64,
     "max_size": 536870912,
-    "notes": "No length walk yet: takes max_size bytes. Players ignore trailing data, but the item will include unrelated bytes."
+    "notes": "Length judged by mediacarve (header/parsed/capped); the mode is the fallback.",
+    "judge": "mediacarve"
   },
   {
     "id": "asf-wmv",
@@ -68,14 +77,28 @@
     "enabled": false,
     "header": "44 48 41 56",
     "mode": "frame_chain",
-    "length_field": {"offset": 12, "size": 4, "endian": "little", "adjust": 0, "multiplier": 1},
+    "length_field": {
+      "offset": 12,
+      "size": 4,
+      "endian": "little",
+      "adjust": 0,
+      "multiplier": 1
+    },
     "footer": "64 68 61 76",
     "footer_tail": 4,
     "chain_max_gap": 0,
     "min_size": 32,
     "max_size": 4294967296,
-    "channel_field": {"offset": 6, "size": 1},
-    "timestamp_field": {"offset": 16, "size": 4, "endian": "little", "format": "dahua_packed"},
+    "channel_field": {
+      "offset": 6,
+      "size": 1
+    },
+    "timestamp_field": {
+      "offset": 16,
+      "size": 4,
+      "endian": "little",
+      "format": "dahua_packed"
+    },
     "notes": "Offsets follow publicly documented DHAV parsers (frame length at 12, packed date/time at 16, 'dhav' + 4-byte trailer). Channel offset 6 is UNCONFIRMED. NOT VALIDATED - confirm on a known Dahua drive and its exports before enabling for casework."
   }
 ]

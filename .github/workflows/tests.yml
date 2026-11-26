@@ -5,12 +5,13 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python: ["3.11", "3.12"]
+        python: ["3.11", "3.12", "3.15"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+          allow-prereleases: true
       - uses: FedericoCarboni/setup-ffmpeg@v3
       - run: pip install pytest
       - run: python -m pytest -q

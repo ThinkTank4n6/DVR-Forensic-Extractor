@@ -48,7 +48,7 @@ ol li,ul li{margin:3px 0}
 </style>
 </head>
 <body>
-<header><div class="logo">DFX</div><h1>DVR Forensic Extractor &mdash; User Manual</h1><div class="v">Version <span id="ver">2026.11.2</span></div></header>
+<header><div class="logo">DFX</div><h1>DVR Forensic Extractor &mdash; User Manual</h1><div class="v">Version <span id="ver">2026.11.6</span></div></header>
 <div class="wrap">
 <nav>
  <b>Getting started</b>
@@ -59,6 +59,10 @@ ol li,ul li{margin:3px 0}
  <b>The screen</b>
  <a href="#layout">Screen layout</a>
  <a href="#home">Home tab</a>
+ <a href="#clock">Clock Offset tab</a>
+ <a class="s" href="#clock-measure">Measuring the offset</a>
+ <a class="s" href="#clock-convert">Converting incident times</a>
+ <a class="s" href="#clock-drift">Drift &amp; daylight saving</a>
  <a href="#carve">Carve tab</a>
  <a href="#sigs">Signatures tab</a>
  <a class="s" href="#editor">Signature editor</a>
@@ -68,6 +72,7 @@ ol li,ul li{margin:3px 0}
  <b>Reference</b>
  <a href="#modes">Carving modes</a>
  <a href="#fields">Signature fields</a>
+ <a class="s" href="#judge">Length judge</a>
  <a href="#builtin">Built-in signatures</a>
  <a href="#output">Output files</a>
  <a href="#report">The report</a>
@@ -119,7 +124,7 @@ DFX has only been tested against synthetic test images, not drives or exports fr
 <tr><td>Python 3.11 or newer</td><td>Yes (source version)</td><td>Not needed for the <code>DFX.exe</code> release build.</td></tr>
 <tr><td>Administrator rights</td><td>For physical drives</td><td>Windows only lets administrators open <code>\\.\PhysicalDriveN</code>.</td></tr>
 <tr><td>Hardware write blocker</td><td>Strongly recommended</td><td>DFX never writes to evidence, but a write blocker proves it.</td></tr>
-<tr><td>libewf-python</td><td>Optional</td><td>Needed only to open E01/Ex01 images: <code>pip install libewf-python</code></td></tr>
+<tr><td>E01 support</td><td>Built in</td><td>E01/Ex01 (and AFF, VHD/VHDX, VMDK, QCOW, DMG) are read by the included ewfprobe. Nothing to install.</td></tr>
 <tr><td>ffmpeg</td><td>Optional</td><td>Used by two tests now, and by MP4 conversion in a later build.</td></tr>
 </table>
 <h3>Start the program</h3>
@@ -139,7 +144,8 @@ DFX has only been tested against synthetic test images, not drives or exports fr
  <li><span class="tab">Home</span> → <span class="btn">New / Open Case</span>: choose an empty case folder, then enter the case number, examiner and agency.</li>
  <li><span class="tab">Home</span> → <span class="btn">Image File</span> or <span class="btn">Physical Drive</span>: choose the evidence.</li>
  <li><span class="tab">Home</span> → <span class="btn">Hash Evidence</span>: wait for MD5 and SHA-256 to appear in the side panel.</li>
- <li><span class="tab">Carve</span>: tick the signatures to use. For a first pass, tick <b>Dry run</b> to see what would be found without copying anything.</li>
+ <li><span class="tab">Clock Offset</span>: create a record for the recorder and save its clock offset (optional, but needed to get actual times in the report).</li>
+ <li><span class="tab">Carve</span>: tick the signatures to use, and choose the DVR under <b>DVR clock</b> to add corrected times. For a first pass, tick <b>Dry run</b> to see what would be found without copying anything.</li>
  <li><span class="btn">Start Carve</span>: progress, speed and time remaining show in the status bar.</li>
  <li><span class="tab">Results</span> → <span class="btn">Open Report</span>.</li>
 </ol>
@@ -163,7 +169,7 @@ DFX has only been tested against synthetic test images, not drives or exports fr
 <h2 id="home">Home tab</h2>
 <div class="ribbon">
  <div class="g"><div><span>New / Open Case</span><span>Case Folder</span></div><small>Case</small></div>
- <div class="g"><div><span>Image File</span><span>Physical Drive</span><span>Hash Evidence</span></div><small>Evidence</small></div>
+ <div class="g"><div><span>Image File</span><span>Physical Drive</span><span>Hash Evidence</span><span>Cancel Job</span></div><small>Evidence</small></div>
  <div class="g"><div><span>Go to Carve</span><span>User Manual</span></div><small>Next / Help</small></div>
 </div>
 <table>
@@ -174,13 +180,90 @@ DFX has only been tested against synthetic test images, not drives or exports fr
   <ul>
    <li>raw, dd, img and bin files</li>
    <li>split images (choose the <code>.001</code> file; DFX joins the rest)</li>
-   <li>E01/Ex01, if libewf-python is installed</li>
+   <li>E01/Ex01: choose the <code>.E01</code>; DFX reads the whole segment set. Also AFF, VHD/VHDX, VMDK, QCOW and Apple DMG.</li>
   </ul></td></tr>
 <tr><td><span class="btn">Physical Drive</span></td><td>Lists the drives Windows lets DFX open, with size and sector size. Click one to select it. If the list is empty, restart DFX <b>as administrator</b>.</td></tr>
-<tr><td><span class="btn">Hash Evidence</span></td><td>Calculates the MD5 and SHA-256 of the whole source. The results show in the side panel and go into <code>case_log.txt</code> and every report. Hashing a large drive takes about as long as reading it once.</td></tr>
+<tr><td><span class="btn">Hash Evidence</span></td><td>Calculates the MD5 and SHA-256 of the whole source. The results show in the side panel and go into <code>case_log.txt</code> and every report. For an <b>E01</b>, DFX also compares its MD5 (and SHA-1, if the image stores one) with the acquisition hash recorded inside the image, and the report says whether they match. Hashing a large drive takes about as long as reading it once.</td></tr>
+<tr><td><span class="btn">Cancel Job</span></td><td>Stops the running hash or carve. While any job runs, DFX will not let you change the evidence or open another case, so a report can never be paired with the wrong evidence or hash.</td></tr>
 <tr><td><span class="btn">Go to Carve</span></td><td>Switches to the Carve tab.</td></tr>
 <tr><td><span class="btn">User Manual</span></td><td>Opens this manual in a new browser tab.</td></tr>
 </table>
+
+
+<h2 id="clock">Clock Offset tab</h2>
+<div class="ribbon">
+ <div class="g"><div><span>New DVR</span><span>Edit DVR</span><span>Delete DVR</span></div><small>Recorder</small></div>
+ <div class="g"><div><span>Save Measurement</span><span>New DVR from Offset</span></div><small>Measure</small></div>
+ <div class="g"><div><span>Log Conversion</span><span>Live Conversion</span></div><small>Convert</small></div>
+ <div class="g"><div><span>Offset Worksheet</span></div><small>Report</small></div>
+</div>
+<p>Recorder clocks are often wrong. This tab measures how far the recorder's clock is from the actual time, saves that measurement in the case, and converts times in both directions:</p>
+<ul>
+ <li><b>DVR → actual</b>: "the video says 9:15:30 PM, so when did it really happen?"</li>
+ <li><b>Actual → DVR</b>: "the 911 call was at 9:11:18 PM, so where do I look on the recorder?"</li>
+</ul>
+<p>It works like the DVR Tool phone app, with the measurements kept in the case file and printed on a worksheet.</p>
+<div class="tip"><b>Convention:</b> Offset = DVR time &minus; actual time. A positive offset means the DVR is <b>fast</b> (ahead), and is shown in red. A negative offset means it is <b>slow</b> (behind), and is shown in blue. Actual = DVR &minus; offset.</div>
+<table>
+<tr><th>Button</th><th>What it does</th></tr>
+<tr><td><span class="btn">New DVR</span></td><td>Creates a recorder record: name/location, make, model, serial, channels, <b>DST setting</b> and notes. Saved in <code>&lt;case&gt;\dvrs.json</code>.</td></tr>
+<tr><td><span class="btn">Edit DVR</span> / <span class="btn">Delete DVR</span></td><td>Changes or removes the selected recorder. Deleting is recorded in the case log.</td></tr>
+<tr><td><span class="btn">Save Measurement</span></td><td>Saves the current DVR clock and reference clock, captured at the same moment, to the selected recorder.</td></tr>
+<tr><td><span class="btn">New DVR from Offset</span></td><td>Creates a recorder and saves the current offset as its first measurement in one step. Same as the <b>Create New DVR using current offset</b> link.</td></tr>
+<tr><td><span class="btn">Log Conversion</span></td><td>Saves the current incident-time conversion, with its event label, to the recorder. Logged conversions go on the worksheet.</td></tr>
+<tr><td><span class="btn">Live Conversion</span></td><td>Shows two running clocks side by side: actual time now, and what the recorder's screen should show now. Useful for checking a recorder on scene.</td></tr>
+<tr><td><span class="btn">Offset Worksheet</span></td><td>Opens a printable report for the selected recorder: details, every measurement with its reference source, drift, and every logged conversion with its notes.</td></tr>
+</table>
+
+<h3 id="clock-measure">Measuring the offset</h3>
+<ol>
+ <li><b>Choose the reference clock.</b>
+  <ul>
+   <li><b>Workstation Clock</b> (green, live): DFX shows what Windows is synced to (for example <code>time.windows.com</code> or your domain controller) and when it last synced. That information is saved with the measurement.</li>
+   <li><b>External Clock</b>: use this when the workstation isn't trustworthy or you're working from a photo. Enter the reference time (for example from time.gov, a GPS clock, or a phone set to network time), press <b>Set</b>, and type the source.</li>
+  </ul></li>
+ <li><b>Set the time shown on the DVR.</b> Type the date and time on the recorder's screen and press <b>Set</b>. The DVR clock then runs on its own. You can also press <b>Copy reference</b> to start from the reference time and adjust from there.</li>
+ <li><b>Line it up to the second.</b>
+  <ol>
+   <li>Watch the recorder's screen.</li>
+   <li>Press <b>Pause</b> the instant its seconds change.</li>
+   <li>Use <b>&minus; / +</b> until DFX shows the same second.</li>
+   <li>Press <b>Resume</b> on the next change.</li>
+  </ol></li>
+ <li>Check the <b>Offset</b> line, for example <i>DVR is 4 min 12 s fast (ahead)</i>, and add a note (how you read the time, photo number).</li>
+ <li>Click <span class="btn">Save Measurement</span>, or <b>Create New DVR using current offset</b> if the recorder has no record yet.</li>
+</ol>
+<div class="warn">A measurement is accurate to about &plusmn;1 second; that's the resolution of a recorder's on-screen clock. Photograph the recorder's screen next to the reference clock as supporting evidence.</div>
+
+<h3 id="clock-convert">Converting incident times</h3>
+<ol>
+ <li>Select the recorder in the <b>Recorders</b> list.</li>
+ <li>Under <b>Incident time</b>, choose the direction:
+  <ul>
+   <li><b>Actual</b>: you know the real time and want the DVR time.</li>
+   <li><b>DVR</b>: you have the time from the video and want the actual time.</li>
+  </ul></li>
+ <li>Enter the date and time. Use &minus; / + for single seconds.</li>
+ <li>DFX shows the converted time, the offset used, how it was worked out, and any warnings.</li>
+ <li>Type an event label (for example <i>Suspect enters store</i>) and click <b>Log</b> to save it to the worksheet and the case log.</li>
+</ol>
+<p>If no recorder is selected, the conversion uses the live, unsaved offset. That's handy for a quick check, but it can't be logged.</p>
+
+<h3 id="clock-drift">Drift &amp; daylight saving</h3>
+<p><b>Drift.</b> A recorder's clock gains or loses time, often seconds a week. With <b>one</b> measurement, DFX assumes the offset never changed and says so on every conversion. Save a <b>second measurement days later</b> and DFX:</p>
+<ul>
+ <li>fits a drift rate (seconds per day)</li>
+ <li>estimates the offset at the exact time being converted</li>
+ <li>warns when the incident is outside the measured period and the drift had to be extrapolated</li>
+</ul>
+<p><b>Daylight saving.</b> If a DST change falls between the incident and the measurement (an incident in July measured in November, say), the offset may differ by one hour. What DFX does depends on the recorder's <b>DST setting</b>:</p>
+<table>
+<tr><th>Recorder DST setting</th><th>What DFX does</th></tr>
+<tr><td>Auto DST off</td><td>Applies the hour automatically and notes it. The recorder kept one clock, so local time moved but the recorder didn't.</td></tr>
+<tr><td>Auto DST on</td><td>Applies no hour correction, with a note to confirm the recorder actually changed its clock on the DST date.</td></tr>
+<tr><td>Blank / Unknown</td><td>Warns that the result may be off by one hour, and asks you to record the setting.</td></tr>
+</table>
+<p>DST dates come from the examining workstation's time zone, so the workstation must be set to the recorder's time zone.</p>
 
 <h2 id="carve">Carve tab</h2>
 <div class="ribbon">
@@ -197,7 +280,7 @@ DFX has only been tested against synthetic test images, not drives or exports fr
 <tr><th>Button</th><th>What it does</th></tr>
 <tr><td><span class="btn">Start Carve</span></td><td>Starts a new run in <code>&lt;case&gt;\runs\carve_&lt;date&gt;_&lt;time&gt;</code>. Only one job (hash or carve) runs at a time.</td></tr>
 <tr><td><span class="btn">Cancel</span></td><td>Stops after the current chunk and saves a checkpoint. A report is still written; it says the scan was canceled.</td></tr>
-<tr><td><span class="btn">Resume Run</span></td><td>Lists canceled or interrupted runs. Choose one to continue from its last checkpoint, using the same signatures. See <a href="#resume">Cancel &amp; resume</a>.</td></tr>
+<tr><td><span class="btn">Resume Run</span></td><td>Lists canceled or interrupted runs. Choose one to continue from its last checkpoint, using the run's <b>original</b> signatures and options. The options currently on the ribbon are ignored, and the case log says so. See <a href="#resume">Cancel &amp; resume</a>.</td></tr>
 </table>
 <h3>Options</h3>
 <table>
@@ -207,6 +290,7 @@ DFX has only been tested against synthetic test images, not drives or exports fr
 <tr><td>Max items</td><td>Stops after this many items (0 = no limit).</td><td>Testing a new signature against a large drive.</td></tr>
 <tr><td>Start / End offset</td><td>The byte range to scan. Decimal or hex (<code>0x...</code>). Leave End blank for the end of the evidence.</td><td>Scanning one partition or a known area.</td></tr>
 <tr><td>Chunk (MB)</td><td>How much is read at a time (default 64).</td><td>Leave at 64 unless you're short on memory.</td></tr>
+<tr><td>DVR clock</td><td>A recorder from the Clock Offset tab. The report then shows each frame chain's device time and, in bold, the estimated actual time, plus the recorder's measurements and any drift/DST notes.</td><td>Whenever the recorder's clock offset has been measured.</td></tr>
 </table>
 
 <h2 id="sigs">Signatures tab</h2>
@@ -256,7 +340,7 @@ DFX has only been tested against synthetic test images, not drives or exports fr
 <ol>
  <li>Open the signature in the editor (<span class="btn">New</span> or <span class="btn">Edit / Copy</span>).</li>
  <li>Click <span class="btn">Test on File</span> and choose a file whose contents you know: an export from the recorder, or a small test image.</li>
- <li>The results table shows each item's offset, length, status, frames, channels, first and last time, and notes. Nothing is copied.</li>
+ <li>The results table shows each item's offset, length, status, frames, channels, first and last time, and notes. Nothing is copied. A test checks at most the <b>first 2 GB</b> and 100 items; the result says when it stopped early. Use a dry-run carve to test a whole drive.</li>
  <li>Change the fields and test again until every known item is found with the right length and nothing extra appears.</li>
 </ol>
 <div class="tip">The test runs on what's in the editor, even before you save, so you can try changes safely.</div>
@@ -303,11 +387,21 @@ DFX has only been tested against synthetic test images, not drives or exports fr
 <tr><th>Mode</th><th>How the end is found</th><th>Good for</th><th>Watch out for</th></tr>
 <tr><td><b>header_footer</b></td><td>Searches forward from the header for the footer, up to max size.</td><td>Formats with a reliable end marker.</td><td>If the item is fragmented, the footer found may belong to another file.</td></tr>
 <tr><td><b>header_length</b></td><td>Reads the size from a field in the header.</td><td>RIFF/AVI and similar formats.</td><td>A damaged header gives a wrong size; the min/max limits catch most of these.</td></tr>
-<tr><td><b>header_maxsize</b></td><td>Takes a fixed number of bytes.</td><td>A first look at formats you don't know yet.</td><td>Items include unrelated trailing data. Many false hits in random data with short headers.</td></tr>
+<tr><td><b>header_maxsize</b></td><td>Takes bytes up to the <b>next header of the same signature</b>, or max size, whichever comes first. The item is noted "end estimated".</td><td>A first look at formats you don't know yet; back-to-back exports.</td><td>The last item before other data includes unrelated trailing bytes. Short headers give false hits in random data.</td></tr>
 <tr><td><b>frame_chain</b></td><td>Reads each frame's length, jumps to the next frame and checks its header (and footer, if set), until the chain breaks.</td><td>DVR streams made of frames (Dahua DHAV).</td><td>A recording split by overwritten space comes out as several chains. Joining them by time comes in a later build.</td></tr>
 <tr><td><b>box_walk</b></td><td>Walks MP4/MOV top-level boxes (<code>ftyp</code>, <code>moov</code>, <code>mdat</code>…).</td><td>MP4, MOV and 3GP.</td><td>Files without <code>moov</code> are flagged as incomplete and may not play.</td></tr>
 </table>
-<p>A header hit that falls inside an item already carved with the same signature is skipped, so the 39 inner frames of a 40-frame chain aren't carved again.</p>
+<h3 id="judge">Length judge (mediacarve)</h3>
+<p>The built-in MP4/MOV, AVI and MKV/WebM signatures don't guess where a file ends: they ask <b>mediacarve</b> (by Alexis Brignoni, included in DFX), which walks each format's own structure. Every item records how its length was known, in the <b>Length is</b> column:</p>
+<table>
+<tr><th>Label</th><th>Meaning</th><th>Can it hide later hits?</th></tr>
+<tr><td>header</td><td>The file's own header recorded the length.</td><td>Yes</td></tr>
+<tr><td>parsed</td><td>The length came from walking the file's structure to its end.</td><td>Yes</td></tr>
+<tr><td>capped</td><td>The end was <b>not</b> confirmed. The length is a ceiling, not a fact: truncated, cut at the next header, or overwritten.</td><td><b>Never</b></td></tr>
+</table>
+<p><b>Overwritten recordings.</b> On a DVR drive, the end of an old recording is often overwritten by a newer one, but the old file's header still declares its full original length. If another valid video header starts inside that declared length, DFX cuts the old file there, labels it <i>capped</i> with the note "probably overwritten", and recovers the newer file separately.</p>
+<p>mediacarve knows nothing of DVR formats (Dahua DHAV, Hikvision IMKH); those keep DFX's own modes. The mediacarve version used is recorded on every report.</p>
+<p>A header hit that falls inside an item whose end is <b>known</b> (footer found, length field, box walk, frame chain) is skipped, so the 39 inner frames of a 40-frame chain aren't carved again. Items whose end is only <b>estimated</b> (max size, or "footer missing → maxsize") never hide later hits, so a real file inside a guessed range is still found. Overlapping header candidates are all checked.</p>
 
 <h2 id="fields">Signature fields (JSON)</h2>
 <pre><code>{
@@ -338,9 +432,9 @@ DFX has only been tested against synthetic test images, not drives or exports fr
 <h2 id="builtin">Built-in signatures</h2>
 <table>
 <tr><th>ID</th><th>Format</th><th>Mode</th><th>Default</th><th>Notes</th></tr>
-<tr><td>mp4-iso</td><td>MP4 / MOV / 3GP</td><td>box_walk</td><td>On</td><td>Flags files with no <code>moov</code> box.</td></tr>
-<tr><td>avi-riff</td><td>AVI</td><td>header_length</td><td>On</td><td>RIFF size + 8. Files over 1 GB (OpenDML) are not joined.</td></tr>
-<tr><td>mkv-ebml</td><td>Matroska / WebM</td><td>header_maxsize</td><td>On</td><td>Takes max size bytes.</td></tr>
+<tr><td>mp4-iso</td><td>MP4 / MOV / 3GP</td><td>box_walk + mediacarve</td><td>On</td><td>Length judged by mediacarve. Flags files with no <code>moov</code> box.</td></tr>
+<tr><td>avi-riff</td><td>AVI</td><td>header_length + mediacarve</td><td>On</td><td>Length judged by mediacarve. Files over 1 GB (OpenDML) recover their first 1 GB part only.</td></tr>
+<tr><td>mkv-ebml</td><td>Matroska / WebM</td><td>header_maxsize + mediacarve</td><td>On</td><td>Length parsed by mediacarve.</td></tr>
 <tr><td>asf-wmv</td><td>ASF / WMV</td><td>header_maxsize</td><td>On</td><td>Takes max size bytes.</td></tr>
 <tr><td>flv</td><td>Flash Video</td><td>header_maxsize</td><td>On</td><td>Takes max size bytes.</td></tr>
 <tr><td>hik-imkh</td><td>Hikvision export (IMKH)</td><td>header_maxsize</td><td>On</td><td>Takes max size bytes. A Hikvision-aware method comes later.</td></tr>
@@ -367,7 +461,7 @@ DFX has only been tested against synthetic test images, not drives or exports fr
 <h2 id="report">The report</h2>
 <p><code>report.html</code> contains:</p>
 <ul>
- <li>Warnings at the top: early-development build, unvalidated signatures used, canceled scan, dry run.</li>
+ <li>Warnings at the top: early-development build, evidence not hashed, unvalidated signatures used, read problems (short reads or unreadable areas, with offsets), scan incomplete, canceled scan, dry run.</li>
  <li><b>Case</b>: number, examiner, agency, description.</li>
  <li><b>Evidence</b>: path, type, size, sector size, MD5/SHA-256 with the time they were calculated, and a read-only statement.</li>
  <li><b>Scan</b>: range, start and finish times (UTC), elapsed time, bytes scanned, items, rejected hits, alignment, signature set SHA-256.</li>
@@ -383,6 +477,12 @@ DFX has only been tested against synthetic test images, not drives or exports fr
  <li>Carve tab → <span class="btn">Resume Run</span> → choose the run.</li>
  <li>The scan continues from the checkpoint and adds to the same <code>carve_log.csv</code>.</li>
 </ol>
+<p>Resume is crash-safe:</p>
+<ul>
+ <li>Items already in <code>carve_log.csv</code> are never carved or logged twice, even when the last checkpoint is older than the last item.</li>
+ <li>Each file is written as <code>.part</code> and renamed only after its log row is written. After a crash, a <code>.part</code> whose row exists is checked against its logged SHA-256 and finished; an unlogged <code>.part</code> is deleted. Both are recorded in the case log.</li>
+ <li>The run continues with its original range, dry-run, alignment, chunk and max-items settings.</li>
+</ul>
 <p>Resume refuses to continue if:</p>
 <ul>
  <li>the evidence size doesn't match, or</li>
@@ -435,15 +535,20 @@ python -m dfx doctor</code></pre>
 </ul>
 
 <h2 id="time">Device times</h2>
-<p>Times shown for frame chains are decoded exactly as the recorder wrote them. DFX applies <b>no time zone and no clock-offset correction</b>. A DVR's clock is often wrong. Measure the recorder's offset against a trusted time source and record it separately. Clock-offset correction will come with the timeline feature in a later build.</p>
+<p>A DVR's clock is often wrong. Times shown for frame chains are decoded exactly as the recorder wrote them, with no time-zone correction. To get actual times, measure the recorder's offset in the <a href="#clock">Clock Offset tab</a> and choose that recorder under <b>DVR clock</b> on the Carve tab. The report then lists both the device time and the corrected time. DFX never changes the device times themselves.</p>
 
 <h2 id="trouble">Troubleshooting</h2>
 <table>
 <tr><th>Problem</th><th>Fix</th></tr>
 <tr><td>Physical Drive list is empty</td><td>Close DFX and start it with <b>Run as administrator</b>. Check that the write blocker shows the drive in Disk Management.</td></tr>
-<tr><td>"E01 support needs the optional package libewf-python"</td><td><code>pip install libewf-python</code>, or convert the image to raw.</td></tr>
+<tr><td>"… is a later segment; open the .E01 file of the set"</td><td>Choose the <code>.E01</code>; DFX finds the other segments next to it.</td></tr>
+<tr><td>"… is encrypted; DFX can't open encrypted images yet"</td><td>Decrypt or convert the image first.</td></tr>
+<tr><td>"made by an older version of DFX" / "length judge changed" on Resume</td><td>Runs can't be resumed across DFX updates. Start a new scan.</td></tr>
 <tr><td>Browser shows "can't reach this page"</td><td>The console window was closed. Start DFX again.</td></tr>
-<tr><td>"Address already in use" in the console</td><td>Another DFX is already running; use that one, or start with <code>--port 8790</code>.</td></tr>
+<tr><td>"could not start on port 8788"</td><td>Another DFX (or another program) is using the port. Open <code>http://127.0.0.1:8788/</code> to use the running copy, or start with <code>--port 8790</code>.</td></tr>
+<tr><td>"can't change the evidence while a … job is running"</td><td>Wait for the job, or click <span class="btn">Cancel Job</span> on the Home tab.</td></tr>
+<tr><td>"Warning: checkpoint not saved … will retry" in the case log</td><td>Antivirus, the Search indexer or a backup tool held the checkpoint file. The scan keeps going; the next checkpoint retries. If it happens constantly, exclude the case folder from real-time scanning (with your lab's approval).</td></tr>
+<tr><td>"Read problems during the scan" on the report</td><td>The drive returned short or no data at the listed offsets. Check the cable or write blocker and re-image the drive; a failing drive should be imaged with a tool that retries and maps bad sectors.</td></tr>
 <tr><td>"... already holds a carve; choose a new output folder or resume"</td><td>The command line won't overwrite a run. Use a new output folder or add <code>--resume</code>. (The GUI always makes a new run folder.)</td></tr>
 <tr><td>"signatures changed since the checkpoint"</td><td>A signature was edited after the run started. Start a new run.</td></tr>
 <tr><td>Thousands of tiny or junk items</td><td>The header is too short or too common. Lengthen the header, set a sensible min size, use Sector-aligned only, or use header_length/frame_chain instead of header_maxsize.</td></tr>
@@ -460,6 +565,14 @@ python -m dfx doctor</code></pre>
 
 <h2 id="license">License</h2>
 <p>Copyright &copy; 2026 Christopher A. Tankelewicz (ThinkTank4n6). Released under the MIT License. The software is provided "as is", without warranty of any kind. You are responsible for validating it before relying on its results.</p>
+<h3>Included third-party code</h3>
+<table>
+<tr><th>Component</th><th>Used for</th><th>Copyright / license</th></tr>
+<tr><td>mediacarve 0.14.1</td><td>Length judge for MP4/MOV, AVI, MKV/WebM</td><td>Copyright &copy; 2026 Alexis Brignoni &mdash; MIT</td></tr>
+<tr><td>ewfprobe 0.17.3</td><td>Reading E01 and other acquisition formats</td><td>Copyright &copy; 2026 Alexis Brignoni &mdash; MIT</td></tr>
+<tr><td>E01 test writer (tests only)</td><td>Building E01 test images</td><td>GLEAPP, Copyright &copy; 2026 charpy4n6, Alexis Brignoni &mdash; MIT</td></tr>
+</table>
+<p>With thanks to Alexis Brignoni. The files are included unmodified; <code>python -m dfx doctor</code> checks them. Full notices: <code>THIRD_PARTY_NOTICES.md</code>.</p>
 </main>
 </div>
 <script>

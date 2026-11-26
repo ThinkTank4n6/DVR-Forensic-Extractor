@@ -4,7 +4,7 @@
 > **New project — not yet tested on real DVR evidence.**
 > This is an early development build. It has only been tested against synthetic test images, not against drives or exports from real DVR/NVR recorders. Every built-in signature is unvalidated, and the Dahua DHAV offsets are partly unconfirmed. **Do not use it for casework** or rely on its results until it has been validated against known test data from real recorders.
 
-**Version 2026.11.2 — Build 1: carving engine + User Manual**
+**Version 2026.11.6 — Build 1 + E01 built in (ewfprobe) + mediacarve length judge**
 
 The full User Manual is built into the program (ribbon → **User Manual**) and is also at [`dfx/web/manual.html`](dfx/web/manual.html).
 
@@ -18,8 +18,9 @@ Copyright (c) 2026 Christopher A. Tankelewicz (ThinkTank4n6). MIT License, provi
   * Raw, dd and img images
   * Split raw images (`.001`, `.002` …)
   * Windows physical drives (`\\.\PhysicalDriveN`): run as Administrator and use a write blocker
-  * E01/Ex01 images, if `libewf-python` is installed
+  * E01/Ex01, AFF, VHD/VHDX, VMDK, QCOW and DMG images, built in through Alexis Brignoni's ewfprobe (no libewf needed). DFX's hash is checked against the acquisition hash stored in the E01.
 * **Evidence hashing**: MD5 and SHA-256, recorded in the case and the report.
+* **Length judge:** MP4/MOV, AVI and MKV/WebM lengths come from Alexis Brignoni's mediacarve, which walks each format's structure. Every item records how its length was known (header, parsed or capped), and a recording whose tail was overwritten is cut where the newer recording starts, so the newer one is never hidden.
 * **Five carving modes**, all defined in signature JSON:
 
 | Mode | How the item's end is found |
@@ -44,11 +45,16 @@ Copyright (c) 2026 Christopher A. Tankelewicz (ThinkTank4n6). MIT License, provi
   * `report.html`
 * **Case log**: every action is written to `case_log.txt` with a UTC time.
 * **GUI**: a ribbon interface (Home, Carve, Signatures, Results, Help) at `http://127.0.0.1:8788`. FME uses port 8787.
+* **Clock Offset tab**:
+  * Measures a recorder's clock against the workstation clock (recording its Windows Time sync source) or an external reference.
+  * Converts DVR ↔ actual time, with drift fitted from two or more measurements and automatic daylight-saving handling based on the recorder's DST setting.
+  * Logs each conversion and prints an offset worksheet.
+  * Carve reports can show corrected actual times.
 * **Signature editor**: create, copy or edit signatures, test them on a sample file, and import or export them as JSON. Imported signatures always start out unvalidated.
 
 ## Run
 
-Requires Python 3.11 or later. No packages are required.
+Requires Python 3.11 or later. No packages are required. Third-party code included in the source is listed in `THIRD_PARTY_NOTICES.md`.
 
 ```
 run_dfx.bat                     (right-click > Run as administrator for physical drives)

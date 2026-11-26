@@ -20,6 +20,8 @@ from pathlib import Path
 
 from ..source import Source
 from .signatures import hex_literal, hex_to_regex, normalize, clean_for_record, parse_hex
+from . import judge as _judge
+from ..fsutil import replace_retry
 
 MB = 1024 * 1024
 
@@ -67,6 +69,7 @@ class CarvedItem:
     end: int
     length: int
     status: str = "carved"          # carved | logged (dry run) | incomplete
+    bounded: str = ""               # header | parsed | capped  (how the length was known)
     notes: str = ""
     file: str = ""
     md5: str = ""
@@ -77,7 +80,7 @@ class CarvedItem:
     last_time: str = ""
 
     CSV_FIELDS = ("item_no", "signature_id", "signature_name", "start", "start_hex",
-                  "end", "length", "status", "notes", "file", "md5", "sha256",
+                  "end", "length", "status", "bounded", "notes", "file", "md5", "sha256",
                   "frames", "channels", "first_time", "last_time")
 
     def row(self) -> dict:
@@ -111,6 +114,7 @@ class CarveStats:
     elapsed: float = 0.0
     canceled: bool = False
     per_signature: dict = field(default_factory=dict)
+    read_errors: list = field(default_factory=list)
 
 
 def _utc_now() -> str:
@@ -118,6 +122,9 @@ def _utc_now() -> str:
 
 
 # --------------------------------------------------------------------- engine
+RESUME_LOCKED_OPTIONS = ("start", "end", "chunk_size", "dry_run", "force_sector_aligned", "max_items")
+
+
 class Carver:
     def __init__(self, source: Source, signatures: list[dict], options: CarveOptions,
                  progress=None, cancel=None, log=None):
@@ -139,6 +146,8 @@ class Carver:
         self.stats = CarveStats(total=0)
         self.items: list[CarvedItem] = []
         self._last_end: dict[str, int] = {}
+        self._seen: set[tuple[str, int]] = set()
+        self._started = ""
 
     # ------------------------------------------------------------- paths
     @property
@@ -161,7 +170,7 @@ class Carver:
         window = 8 * MB
         found = None
         while pos < limit:
-            buf = self.src.read_at(pos, min(window + len(foot) - 1, limit - pos))
+            buf = self.src.read_full(pos, min(window + len(foot) - 1, limit - pos))
             if not buf:
                 break
             if s["footer_search"] == "first":
@@ -178,13 +187,14 @@ class Carver:
             end = min(found + len(foot) + int(s["footer_tail"]), self.src.size)
             return end, ""
         if s["on_missing_footer"] == "maxsize":
-            return limit, "footer not found; took max_size"
+            end, why = self._cut_at_next_header(s, start, limit)
+            return end, "footer not found; " + why
         return None, "footer not found within max_size"
 
     def _length_from_field(self, s, start):
         lf = s["length_field"]
         off, size = int(lf["offset"]), int(lf["size"])
-        buf = self.src.read_at(start + off, size)
+        buf = self.src.read_full(start + off, size)
         v = _read_uint(buf, 0, size, lf.get("endian", "little"))
         if v is None:
             return None
@@ -200,16 +210,42 @@ class Carver:
             return self.src.size, f"truncated: length {n} runs past end of source"
         return start + n, ""
 
+    def _next_header(self, s, start, limit):
+        """Start of the next header of the same signature after `start`, or None."""
+        hoff, hlen = int(s["header_offset"]), s["_hlen"]
+        pos = start + 1 + hoff               # search where the next header's magic could sit
+        window = 8 * MB
+        while pos < limit + hoff:
+            buf = self.src.read_full(pos, min(window + hlen - 1, limit + hoff + hlen - pos))
+            if len(buf) < hlen:
+                return None
+            m = s["_re"].search(buf)
+            if m and m.start() < window:
+                nxt = pos + m.start() - hoff
+                if start < nxt < limit:
+                    return nxt
+                return None
+            pos += window
+        return None
+
+    def _cut_at_next_header(self, s, start, limit):
+        nxt = self._next_header(s, start, limit)
+        if nxt is not None:
+            return nxt, f"end estimated: stopped at the next {s['id']} header (0x{nxt:X})"
+        if limit - start < int(s["max_size"]):
+            return limit, "end estimated: truncated at end of source"
+        return limit, "end estimated: took max_size"
+
     def _end_maxsize(self, s, start):
-        end = min(start + int(s["max_size"]), self.src.size)
-        return end, "" if end - start == int(s["max_size"]) else "truncated at end of source"
+        limit = min(start + int(s["max_size"]), self.src.size)
+        return self._cut_at_next_header(s, start, limit)
 
     def _end_box_walk(self, s, start):
         pos = start
         limit = min(start + int(s["max_size"]), self.src.size)
         seen = []
         while pos + 8 <= limit:
-            h = self.src.read_at(pos, 16)
+            h = self.src.read_full(pos, 16)
             if len(h) < 8:
                 break
             size = int.from_bytes(h[:4], "big")
@@ -226,8 +262,15 @@ class Carver:
                 break
             elif size < 8:
                 break
-            if not seen and btype != b"ftyp":
-                return None, "first box is not ftyp"
+            if not seen:
+                if btype != b"ftyp":
+                    return None, "first box is not ftyp"
+                # a real ftyp is small (major brand, version, a few compatible brands)
+                # and its brands are printable; random 'ftyp' bytes in unallocated space
+                # are neither, and used to be carved as huge "truncated" MP4s
+                brand = h[8:12]
+                if not (16 <= size <= 4096) or not all(32 <= c < 127 for c in brand):
+                    return None, "ftyp box not plausible"
             if pos + size > limit:
                 seen.append(btype.decode("latin-1"))
                 return limit, "last box runs past max_size/end of source (truncated)"
@@ -259,12 +302,12 @@ class Carver:
         first_t = last_t = ""
         bad_footer = 0
         while cur < limit:
-            h = self.src.read_at(cur, need)
+            h = self.src.read_full(cur, need)
             if len(h) < need or not hdr_re.match(h, hoff):
                 # gap tolerance: look ahead for the next header
                 gap = int(s["chain_max_gap"])
                 if gap and frames:
-                    look = self.src.read_at(cur, gap + s["_hlen"] + hoff)
+                    look = self.src.read_full(cur, gap + s["_hlen"] + hoff)
                     m = hdr_re.search(look, hoff)
                     if m and m.start() - hoff <= gap:
                         cur += m.start() - hoff
@@ -276,7 +319,7 @@ class Carver:
                 break
             if foot:
                 fpos = cur + n - tail - len(foot)
-                if self.src.read_at(fpos, len(foot)) != foot:
+                if self.src.read_full(fpos, len(foot)) != foot:
                     bad_footer += 1
                     break
             if cf:
@@ -302,16 +345,18 @@ class Carver:
         return cur, note, meta
 
     # ------------------------------------------------------------- extraction
-    def _write_item(self, s, item: CarvedItem):
+    def _write_item(self, s, item: CarvedItem) -> Path:
+        """Copy the item to <final>.part; the caller renames it after logging."""
         sub = self.out / "carved" / s["id"]
         sub.mkdir(parents=True, exist_ok=True)
         name = f"{item.item_no:06d}_off{item.start:012X}.{s['extension']}"
         path = sub / name
+        part = path.with_name(path.name + ".part")
         md5, sha = hashlib.md5(), hashlib.sha256()
         pos, end = item.start, item.end
-        with open(path, "wb") as f:
+        with open(part, "wb") as f:
             while pos < end:
-                b = self.src.read_at(pos, min(16 * MB, end - pos))
+                b = self.src.read_full(pos, min(16 * MB, end - pos))
                 if not b:
                     break
                 f.write(b)
@@ -320,10 +365,16 @@ class Carver:
                 pos += len(b)
         item.file = str(path.relative_to(self.out))
         item.md5, item.sha256 = md5.hexdigest(), sha.hexdigest()
+        if pos < end:
+            item.status = "incomplete"
+            item.notes = (item.notes + "; " if item.notes else "") + f"source read stopped at 0x{pos:X}"
+        return part
 
     def _process_hit(self, s, start) -> bool:
         if start < 0 or start >= self.src.size:
             return False
+        if (s["id"], start) in self._seen:
+            return False  # already logged (resume after a crash re-scans past the checkpoint)
         if start < self._last_end.get(s["id"], -1):
             return False  # inside an item already carved with this signature
         if (s["sector_aligned"] or self.opt.force_sector_aligned) and start % s["_align"]:
@@ -342,21 +393,43 @@ class Carver:
             end, note, meta = self._walk_chain(s, start)
         else:
             end, note = None, f"unknown mode {mode}"
+        if end is not None:
+            if "end estimated" in note or "truncated" in note or "stopped at max_size" in note:
+                bounded = "capped"
+            elif mode == "header_length":
+                bounded = "header"
+            else:
+                bounded = "parsed"
+        else:
+            bounded = ""
+        if s.get("judge") == "mediacarve":
+            # header_maxsize (and a footer-missing fallback) checks nothing beyond the
+            # magic bytes, so its acceptance is no evidence the header is real
+            own_validates = mode not in ("header_maxsize",) and "footer not found" not in note
+            end, note, bounded = _judge.judge(self.src, start, end if own_validates else None,
+                                              note, int(s["max_size"]))
         if end is None or end - start < int(s["min_size"]):
             self.stats.rejected += 1
             return False
         item = CarvedItem(item_no=len(self.items) + 1, signature_id=s["id"],
                           signature_name=s["name"], start=start, end=end,
-                          length=end - start, notes=note, **meta)
-        if "incomplete" in note or "truncated" in note:
+                          length=end - start, notes=note, bounded=bounded, **meta)
+        if "incomplete" in note or "truncated" in note or "no moov" in note:
             item.status = "incomplete"
+        part = None
         if self.opt.dry_run:
             item.status = "logged" if item.status == "carved" else item.status
         else:
-            self._write_item(s, item)
+            part = self._write_item(s, item)
         self.items.append(item)
+        self._seen.add((s["id"], start))
         self._append_csv(item)
-        self._last_end[s["id"]] = end
+        if part is not None:
+            replace_retry(part, self.out / item.file)   # file only "exists" once it is logged
+        # Only a structurally known end may hide later hits of this signature.
+        # A capped end (max_size, next-header cut, judge ceiling) never suppresses real items.
+        if bounded != "capped":
+            self._last_end[s["id"]] = end
         self.stats.items += 1
         self.stats.bytes_carved += item.length
         ps = self.stats.per_signature.setdefault(s["id"], 0)
@@ -372,20 +445,31 @@ class Carver:
                 w.writeheader()
             w.writerow(item.row())
 
+    def _judge_version(self) -> str:
+        return _judge.version() if any(s.get("judge") == "mediacarve" for s in self.sigs) else ""
+
     def _sig_fingerprint(self) -> str:
-        blob = json.dumps([clean_for_record({k: v for k, v in s.items() if not k.startswith("_")})
-                           for s in self.sigs], sort_keys=True).encode()
+        blob = json.dumps({"signatures": [clean_for_record({k: v for k, v in s.items() if not k.startswith("_")})
+                                          for s in self.sigs],
+                           "judge": self._judge_version()}, sort_keys=True).encode()
         return hashlib.sha256(blob).hexdigest()
 
-    def _write_checkpoint(self, next_offset: int):
+    def _write_checkpoint(self, next_offset: int, final: bool = False):
         data = {"source": self.src.path, "source_size": self.src.size,
                 "signatures_sha256": self._sig_fingerprint(),
                 "next_offset": next_offset, "items": self.stats.items,
                 "last_end": self._last_end, "written": _utc_now(),
-                "dry_run": self.opt.dry_run}
+                "dry_run": self.opt.dry_run, "started": self.stats.started,
+                "options": {k: getattr(self.opt, k) for k in RESUME_LOCKED_OPTIONS}}
         tmp = self.ckpt_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        os.replace(tmp, self.ckpt_path)
+        try:
+            replace_retry(tmp, self.ckpt_path)
+        except OSError as e:
+            # never crash a long scan over a checkpoint; the next one (or the final one) retries
+            self.log(f"Warning: checkpoint not saved at offset {next_offset:,} ({e}); will retry")
+            if final:
+                raise
 
     def _load_checkpoint(self) -> int:
         if not self.ckpt_path.exists():
@@ -393,9 +477,25 @@ class Carver:
         d = json.loads(self.ckpt_path.read_text(encoding="utf-8"))
         if d.get("source_size") != self.src.size:
             raise ValueError("checkpoint belongs to a different source (size differs)")
+        if self.csv_path.exists():
+            with open(self.csv_path, newline="", encoding="utf-8") as f:
+                header = next(csv.reader(f), [])
+            if tuple(header) != CarvedItem.CSV_FIELDS:
+                raise ValueError("this run was made by an older version of DFX (its log has different "
+                                 "columns); start a new scan")
         if d.get("signatures_sha256") != self._sig_fingerprint():
-            raise ValueError("signatures changed since the checkpoint; start a new scan")
+            raise ValueError("the signatures or DFX's length judge changed since this run's checkpoint "
+                             "(for example after updating DFX); start a new scan")
         self._last_end = {k: int(v) for k, v in d.get("last_end", {}).items()}
+        saved = d.get("options") or {}
+        changed = [k for k in RESUME_LOCKED_OPTIONS if k in saved and saved[k] != getattr(self.opt, k)]
+        for k in RESUME_LOCKED_OPTIONS:
+            if k in saved:
+                setattr(self.opt, k, saved[k])
+        if changed:
+            self.log("Resume uses the run's original options (ignored new values for: "
+                     + ", ".join(changed) + ")")
+        self.stats.started = d.get("started", "")
         if self.csv_path.exists():
             with open(self.csv_path, newline="", encoding="utf-8") as f:
                 for r in csv.DictReader(f):
@@ -403,12 +503,39 @@ class Carver:
                         item_no=int(r["item_no"]), signature_id=r["signature_id"],
                         signature_name=r["signature_name"], start=int(r["start"]),
                         end=int(r["end"]), length=int(r["length"]), status=r["status"],
+                        bounded=r.get("bounded") or ("capped" if "end estimated" in r["notes"] else ""),
                         notes=r["notes"], file=r["file"], md5=r["md5"], sha256=r["sha256"],
                         frames=int(r["frames"] or 0), channels=r["channels"],
                         first_time=r["first_time"], last_time=r["last_time"]))
         self.stats.items = len(self.items)
+        for it in self.items:
+            self._seen.add((it.signature_id, it.start))
+            self.stats.bytes_carved += it.length
+            self.stats.per_signature[it.signature_id] = self.stats.per_signature.get(it.signature_id, 0) + 1
+            if it.bounded != "capped" and "end estimated" not in it.notes:
+                self._last_end[it.signature_id] = max(self._last_end.get(it.signature_id, -1), it.end)
+        self._recover_parts()
         self.log(f"Resuming at offset {d['next_offset']:,} with {self.stats.items} items already logged")
         return int(d["next_offset"])
+
+    def _recover_parts(self):
+        """After a crash: finish renames that were logged, delete copies that were not."""
+        logged = {it.file: it for it in self.items if it.file}
+        for part in (self.out / "carved").rglob("*.part") if (self.out / "carved").exists() else []:
+            final = part.with_name(part.name[:-5])
+            rel = str(final.relative_to(self.out))
+            it = logged.get(rel)
+            if it and not final.exists():
+                h = hashlib.sha256()
+                with open(part, "rb") as f:
+                    for b in iter(lambda: f.read(16 * MB), b""):
+                        h.update(b)
+                if h.hexdigest() == it.sha256:
+                    replace_retry(part, final)
+                    self.log(f"Recovered {rel} after interruption (hash verified)")
+                    continue
+            part.unlink()
+            self.log(f"Removed unlogged partial file {part.name} left by the interruption")
 
     # ------------------------------------------------------------------ run
     def run(self) -> CarveStats:
@@ -421,8 +548,9 @@ class Carver:
                 raise FileExistsError(f"{self.out} already holds a carve; choose a new output "
                                       "folder or resume")
             pos = self.opt.start
+        end = min(self.opt.end or self.src.size, self.src.size)   # options may come from the checkpoint
         self.stats.total = end - self.opt.start
-        self.stats.started = _utc_now()
+        self.stats.started = self.stats.started or _utc_now()
         self.log(f"Scan {self.src.path} from {pos:,} to {end:,} with "
                  f"{len(self.sigs)} signature(s){' (dry run)' if self.opt.dry_run else ''}")
         t0 = time.time()
@@ -433,17 +561,30 @@ class Carver:
                 self.stats.canceled = True
                 self.log("Canceled by user; checkpoint saved - you can resume")
                 break
-            data = self.src.read_at(pos, min(chunk + self.overlap, end - pos + self.overlap))
+            want = min(chunk + self.overlap, end - pos + self.overlap)
+            data = self.src.read_full(pos, want)
             if not data:
+                self.stats.read_errors.append(f"no data returned at offset {pos:,} (0x{pos:X}); scan stopped")
+                self.log(self.stats.read_errors[-1])
                 break
-            body = min(chunk, end - pos)
+            body = min(chunk, end - pos, len(data))
+            if len(data) < min(want, self.src.size - pos):
+                self.stats.read_errors.append(f"short read at offset {pos:,} (0x{pos:X}): "
+                                              f"{len(data):,} of {min(want, self.src.size - pos):,} bytes")
+                self.log(self.stats.read_errors[-1])
             hits = []
             for s in self.sigs:
                 hoff = int(s["header_offset"])
-                for m in s["_re"].finditer(data):
-                    if m.start() >= body:
+                # search() restarted one byte after each match: finds overlapping
+                # candidates (finditer doesn't) and keeps re's fast literal scan
+                # (a lookahead pattern disables it: 220 -> 12 MB/s)
+                at, rx = 0, s["_re"]
+                while True:
+                    m = rx.search(data, at)
+                    if m is None or m.start() >= body:
                         break
                     hits.append((pos + m.start() - hoff, s))
+                    at = m.start() + 1
             hits.sort(key=lambda h: h[0])
             for start, s in hits:
                 if self.opt.max_items and self.stats.items >= self.opt.max_items:
@@ -459,7 +600,7 @@ class Carver:
             if self.opt.max_items and self.stats.items >= self.opt.max_items:
                 self.log(f"Stopped at max_items={self.opt.max_items}")
                 break
-        self._write_checkpoint(pos)
+        self._write_checkpoint(pos, final=True)
         self.stats.finished = _utc_now()
         self.stats.elapsed = time.time() - t0
         self._write_session(end)
@@ -475,6 +616,7 @@ class Carver:
             "signatures": [clean_for_record({k: v for k, v in s.items() if not k.startswith("_")})
                            for s in self.sigs],
             "signatures_sha256": self._sig_fingerprint(),
+            "length_judge": {"name": "mediacarve", "version": self._judge_version()} if self._judge_version() else None,
             "stats": asdict(self.stats),
         }
         self.session_path.write_text(json.dumps(data, indent=2), encoding="utf-8")

@@ -15,6 +15,9 @@ jobs:
       - run: pip install pyinstaller
       - run: .\build_windows.bat
         shell: cmd
+      - name: Smoke-test the executable
+        shell: cmd
+        run: dist\DFX.exe doctor
       - name: Package
         shell: pwsh
         run: |

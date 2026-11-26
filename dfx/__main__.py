@@ -51,8 +51,7 @@ def main(argv=None):
 
     if a.cmd in (None, "gui"):
         from .server import serve
-        serve(port=getattr(a, "port", DEFAULT_PORT), open_browser=not getattr(a, "no_browser", False))
-        return 0
+        return serve(port=getattr(a, "port", DEFAULT_PORT), open_browser=not getattr(a, "no_browser", False)) or 0
 
     from .server import config_dir
     from .carve import SignatureLibrary, Carver, CarveOptions, check
@@ -92,17 +91,22 @@ def main(argv=None):
         print(f"Python  {platform.python_version()} ({platform.system()} {platform.release()})")
         ok = sys.version_info >= (3, 11)
         print(f"  Python 3.11+ ............ {'OK' if ok else 'TOO OLD'}")
+        from . import vendored
+        vend = vendored.verify()
+        for v in vend:
+            print(f"  {v['name']:<12} {v['version']:<8} {'OK (byte-identical)' if v['ok'] else 'CHANGED - SHA-256 does not match vendored.json'}")
         try:
-            import pyewf  # noqa: F401
-            print("  E01 support (pyewf) ..... OK")
-        except ImportError:
-            print("  E01 support (pyewf) ..... not installed (optional: pip install libewf-python)")
+            vendored.ewfprobe(), vendored.mediacarve()
+            print("  E01 / length judge ...... loaded")
+        except RuntimeError as e:
+            print(f"  E01 / length judge ...... FAILED: {e}")
+            vend.append({"ok": False})
         print(f"  ffmpeg (for later builds)  {'found' if shutil.which('ffmpeg') else 'not found'}")
         sigs = lib.all()
         bad = [x for x in sigs if x.get('problems')]
         print(f"  Signatures .............. {len(sigs)} loaded, {len(bad)} with problems")
         print(f"  Config folder ........... {config_dir()}")
-        return 0 if ok and not bad else 1
+        return 0 if ok and not bad and all(v["ok"] for v in vend) else 1
 
     if a.cmd == "carve":
         sigs = [x for x in lib.all() if not x.get("problems")]
