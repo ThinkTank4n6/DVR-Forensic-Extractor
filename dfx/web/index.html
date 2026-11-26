@@ -141,6 +141,7 @@ const I={
  report:'<svg viewBox="0 0 24 24"><path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>',
  folder:'<svg viewBox="0 0 24 24"><path d="M3 6h6l2 2h10v11H3z"/><path d="M3 10h18"/></svg>',
  refresh:'<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg>',
+ book:'<svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M8 7h7M8 11h7"/></svg>',
  help:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg>',
 };
 const rb=(id,icon,label,primary)=>`<button class="rbtn ${primary?'primary':''}" id="${id}">${I[icon]}<span>${label}</span></button>`;
@@ -152,7 +153,7 @@ function ribbon(){
   if(TAB==="home") R.innerHTML=
     grp("Case",rb("bNewCase","case","New / Open Case",1)+rb("bCaseFolder","folder","Case Folder"))+
     grp("Evidence",rb("bImage","file","Image File")+rb("bDrive","drive","Physical Drive")+rb("bHash","hash","Hash Evidence"))+
-    grp("Next",rb("bGoCarve","play","Go to Carve",1));
+    grp("Next",rb("bGoCarve","play","Go to Carve",1))+grp("Help",rb("bManual","book","User Manual"));
   if(TAB==="carve") R.innerHTML=
     grp("Run",rb("bStart","play","Start Carve",1)+rb("bCancel","stop","Cancel")+rb("bResume","resume","Resume Run"))+
     grp("Options",`<div class="rcol">
@@ -170,7 +171,7 @@ function ribbon(){
   if(TAB==="results") R.innerHTML=
     grp("Runs",rb("bRefresh","refresh","Refresh"))+
     grp("Output",rb("bReport","report","Open Report",1)+rb("bRebuild","report","Rebuild Report")+rb("bOpenRun","folder","Open Run Folder"));
-  if(TAB==="help") R.innerHTML=grp("Help",rb("bAbout","help","About"));
+  if(TAB==="help") R.innerHTML=grp("Help",rb("bManual","book","User Manual",1)+rb("bAbout","help","About"));
   wire();
 }
 
@@ -178,7 +179,7 @@ function ribbon(){
 function content(){
   const C=$("#content");
   if(TAB==="home"){
-    C.innerHTML=`<div class="card"><h2>Workflow</h2>
+    C.innerHTML=`<div class="card" style="border-left:4px solid var(--amber);background:var(--amberbg)"><b>Early development build &mdash; not yet tested on real DVR evidence.</b> Do not use for casework until the signatures have been validated.</div><div class="card"><h2>Workflow</h2>
      <ol><li><b>New / Open Case</b> &mdash; choose a case folder and enter case details. Every action is written to <span class="mono">case_log.txt</span> with a UTC time.</li>
      <li><b>Image File</b> (raw, dd, .001 split, E01 with libewf-python) or <b>Physical Drive</b> (run as Administrator, use a write blocker).</li>
      <li><b>Hash Evidence</b> &mdash; MD5 and SHA-256 recorded in the report.</li>
@@ -208,7 +209,7 @@ function content(){
   }
   if(TAB==="results") loadRuns();
   if(TAB==="help"){
-    C.innerHTML=`<div class="card"><h2>Carving modes</h2><table>
+    C.innerHTML=`<div class="card"><h2>User Manual</h2><p>The full manual covers every ribbon button, the signature editor, output files, validation and troubleshooting. <button class="btn amber" onclick="window.open('/manual','_blank')">Open User Manual</button></p></div><div class="card"><h2>Carving modes</h2><table>
      <tr><th>header_footer</th><td>From the header to the first (or last) footer within max size.</td></tr>
      <tr><th>header_length</th><td>Item size read from a field in the header (offset, size, byte order, adjust, multiplier).</td></tr>
      <tr><th>header_maxsize</th><td>Fixed amount from the header. Use for a first look at unknown formats.</td></tr>
@@ -400,7 +401,8 @@ function wire(){
   on("bReport",()=>{if(!SELRUN)return alert("Select a run.");window.open("/runs/"+encodeURIComponent(SELRUN)+"/report.html","_blank")});
   on("bRebuild",async()=>{if(!SELRUN)return alert("Select a run.");try{await api("/api/report",{run:SELRUN});window.open("/runs/"+encodeURIComponent(SELRUN)+"/report.html","_blank")}catch(e){alert(e.message)}});
   on("bOpenRun",()=>{if(!SELRUN)return alert("Select a run.");api("/api/open",{run:SELRUN}).catch(e=>alert(e.message))});
-  on("bAbout",()=>modal("About",`<p><b>DVR Forensic Extractor</b> ${esc(S.version)}</p><p>Copyright (c) 2026 Christopher A. Tankelewicz (ThinkTank4n6). MIT License.</p><p class="muted">Provided without warranty. Validate every signature and every release against known test data before relying on results.</p>`,[["Close",closeModal,"amber"]]));
+  on("bManual",()=>window.open("/manual","_blank"));
+  on("bAbout",()=>modal("About",`<p><b>DVR Forensic Extractor</b> ${esc(S.version)}</p><p>Copyright (c) 2026 Christopher A. Tankelewicz (ThinkTank4n6). MIT License.</p><p><b>Early development build &mdash; not yet tested on real DVR evidence. Do not use for casework.</b></p><p class="muted">Provided without warranty. Validate every signature and every release against known test data before relying on results.</p>`,[["Close",closeModal,"amber"]]));
 }
 function parseOff(v){v=(v||"").trim();if(!v)return 0;return v.toLowerCase().startsWith("0x")?parseInt(v,16):Number(v.replace(/,/g,""))}
 function setTab(t){TAB=t;document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===t));ribbon();content()}

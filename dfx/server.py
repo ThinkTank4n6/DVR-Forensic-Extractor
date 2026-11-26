@@ -327,6 +327,8 @@ def make_handler(app: App, port: int):
             try:
                 if u.path in ("/", "/index.html"):
                     return self._file(WEB / "index.html", "text/html; charset=utf-8")
+                if u.path in ("/manual", "/manual.html"):
+                    return self._file(WEB / "manual.html", "text/html; charset=utf-8")
                 if u.path.startswith("/static/"):
                     name = Path(unquote(u.path[8:])).name
                     return self._file(WEB / name)

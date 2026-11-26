@@ -36,7 +36,8 @@ def build_report(run_dir: str | Path, case: dict | None = None, evidence_hash: d
     unvalidated = [s for s in sess["signatures"] if not s.get("validated")]
     now = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
-    warn = ""
+    warn = ("<div class='warn'><b>Early development build of DFX &mdash; not yet tested on real DVR evidence.</b> "
+            "Results must be independently verified.</div>")
     if unvalidated:
         warn += ("<div class='warn'><b>Unvalidated signatures used:</b> "
                  + ", ".join(_h(s["name"]) for s in unvalidated)

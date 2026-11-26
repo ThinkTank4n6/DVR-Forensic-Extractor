@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DVR Forensic Extractor – User Manual</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{--graphite:#1f2933;--graphite2:#2b3946;--graphite3:#3a4a59;--amber:#e39a2d;--amberbg:#fff4e0;--bg:#eef1f4;--line:#c9d0d8;--text:#1d232b;--muted:#5b6773;--bad:#b3261e}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",Arial,sans-serif;font-size:14px;line-height:1.55;color:var(--text);background:var(--bg)}
+header{background:var(--graphite);color:#fff;padding:14px 28px;display:flex;align-items:center;gap:12px}
+.logo{width:30px;height:30px;border-radius:5px;background:var(--amber);color:var(--graphite);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:12px}
+header h1{font-size:19px;margin:0;font-weight:600}
+header .v{color:#9fb0c0;font-size:13px;margin-left:auto}
+.wrap{display:flex;align-items:flex-start}
+nav{position:sticky;top:0;width:270px;height:100vh;overflow:auto;background:#fff;border-right:1px solid var(--line);padding:16px 14px;font-size:13px}
+nav b{display:block;color:var(--muted);text-transform:uppercase;font-size:11px;letter-spacing:.6px;margin:12px 0 4px}
+nav a{display:block;color:var(--graphite2);text-decoration:none;padding:3px 6px;border-radius:3px}
+nav a:hover{background:var(--amberbg)}
+nav a.s{padding-left:18px;color:var(--muted)}
+main{flex:1;max-width:980px;padding:24px 36px 80px}
+h2{color:var(--graphite);border-bottom:2px solid var(--amber);padding-bottom:4px;margin-top:40px}
+h3{color:var(--graphite2);margin-top:26px}
+code,.mono{font-family:Consolas,"Cascadia Mono",monospace;font-size:12.5px;background:#f2f4f6;padding:1px 4px;border-radius:3px}
+pre{background:#151d25;color:#d7e0e8;padding:12px 14px;border-radius:5px;overflow:auto;font-size:12.5px}
+pre code{background:none;color:inherit;padding:0}
+table{border-collapse:collapse;width:100%;margin:10px 0;background:#fff}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:#f5f7f9}
+.warn{background:var(--amberbg);border-left:4px solid var(--amber);padding:10px 14px;margin:14px 0}
+.stop{background:#fde8e6;border-left:4px solid var(--bad);padding:10px 14px;margin:14px 0}
+.tip{background:#e8f1f8;border-left:4px solid #3a6f9a;padding:10px 14px;margin:14px 0}
+.btn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);background:#fff;border-radius:4px;padding:0 6px;font-size:12.5px;white-space:nowrap}
+.tab{display:inline-block;background:var(--graphite2);color:#fff;border-radius:3px;padding:0 7px;font-size:12.5px}
+.ribbon{background:#fff;border:1px solid var(--line);border-radius:4px;display:flex;flex-wrap:wrap;margin:10px 0}
+.ribbon .g{border-right:1px solid var(--line);padding:6px 10px;text-align:center}
+.ribbon .g div{display:flex;gap:6px;justify-content:center}
+.ribbon .g span{display:block;border:1px solid #e3e7eb;border-radius:3px;padding:6px 8px;font-size:12px;min-width:70px}
+.ribbon .g small{color:var(--muted);font-size:11px}
+ol li,ul li{margin:3px 0}
+.layout{display:grid;grid-template-columns:1fr;border:1px solid var(--line);border-radius:4px;overflow:hidden;font-size:12px;margin:10px 0}
+.layout div{padding:6px 10px;border-bottom:1px solid var(--line)}
+.l1{background:var(--graphite);color:#fff}.l2{background:var(--graphite2);color:#fff}.l3{background:#fff}
+.l4{display:grid!important;grid-template-columns:200px 1fr;padding:0!important}
+.l4 div{border-bottom:none;border-right:1px solid var(--line);min-height:70px}
+.l5{background:#151d25;color:#c5d1dc}.l6{background:var(--graphite);color:#fff}
+@media print{nav,header .v{display:none}.wrap{display:block}main{max-width:none;padding:0 10px}body{background:#fff}h2{page-break-before:always}h2.first{page-break-before:avoid}pre{white-space:pre-wrap}}
+</style>
+</head>
+<body>
+<header><div class="logo">DFX</div><h1>DVR Forensic Extractor &mdash; User Manual</h1><div class="v">Version <span id="ver">2026.11.2</span></div></header>
+<div class="wrap">
+<nav>
+ <b>Getting started</b>
+ <a href="#status">Project status</a>
+ <a href="#about">What DFX does</a>
+ <a href="#install">Install &amp; start</a>
+ <a href="#quick">Quick start</a>
+ <b>The screen</b>
+ <a href="#layout">Screen layout</a>
+ <a href="#home">Home tab</a>
+ <a href="#carve">Carve tab</a>
+ <a href="#sigs">Signatures tab</a>
+ <a class="s" href="#editor">Signature editor</a>
+ <a class="s" href="#testing">Testing a signature</a>
+ <a href="#results">Results tab</a>
+ <a href="#help">Help tab</a>
+ <b>Reference</b>
+ <a href="#modes">Carving modes</a>
+ <a href="#fields">Signature fields</a>
+ <a href="#builtin">Built-in signatures</a>
+ <a href="#output">Output files</a>
+ <a href="#report">The report</a>
+ <a href="#resume">Cancel &amp; resume</a>
+ <a href="#cli">Command line</a>
+ <b>Forensic practice</b>
+ <a href="#validate">Validating signatures</a>
+ <a href="#evidence">Evidence handling</a>
+ <a href="#time">Device times</a>
+ <b>Help</b>
+ <a href="#trouble">Troubleshooting</a>
+ <a href="#faq">FAQ</a>
+ <a href="#license">License</a>
+</nav>
+<main>
+
+<h2 id="status" class="first">Project status</h2>
+<div class="stop"><b>Early development build &mdash; not yet tested on real DVR evidence.</b><br>
+DFX has only been tested against synthetic test images, not drives or exports from real DVR/NVR recorders. Every built-in signature is <b>unvalidated</b>, and the Dahua DHAV offsets are partly unconfirmed. Do not use DFX for casework, or rely on its results, until it has been validated against known test data from real recorders.</div>
+<p>This manual covers <b>Build 1 (carving engine)</b>. These features are planned for later builds and are <b>not</b> in this version:</p>
+<ul>
+ <li>the signature learner</li>
+ <li>Dahua/Hikvision stream rebuilding and MP4 conversion with DVR timestamps</li>
+ <li>filesystem detection</li>
+ <li>DVR filesystem parsing (Hikvision HIKBTREE, Dahua)</li>
+</ul>
+
+<h2 id="about">What DFX does</h2>
+<p>DFX reads a DVR/NVR hard drive, or an image of one, <b>read-only</b>. It searches every byte for video using a library of <b>signatures</b>, which you can edit: patterns that say how an item starts and how to find where it ends.</p>
+<p>Each item it finds is:</p>
+<ul>
+ <li>copied out to the case folder</li>
+ <li>hashed (MD5 and SHA-256)</li>
+ <li>logged with its exact location in the evidence</li>
+ <li>listed in an HTML report</li>
+</ul>
+<p>It can:</p>
+<ul>
+ <li>Recover whole video files (MP4/MOV, AVI, MKV, WMV, FLV) from used or unallocated space.</li>
+ <li>Follow chains of DVR frames (Dahua DHAV style), recording the frame count, camera channel and first/last device time.</li>
+ <li>Carve any format you define yourself: header and footer, header and length field, or header and fixed size.</li>
+</ul>
+
+<h2 id="install">Install &amp; start</h2>
+<h3>Requirements</h3>
+<table>
+<tr><th>Item</th><th>Needed?</th><th>Notes</th></tr>
+<tr><td>Windows 10/11 (64-bit)</td><td>Yes</td><td>Physical drive reading is Windows-only. Image files also work on macOS/Linux.</td></tr>
+<tr><td>Python 3.11 or newer</td><td>Yes (source version)</td><td>Not needed for the <code>DFX.exe</code> release build.</td></tr>
+<tr><td>Administrator rights</td><td>For physical drives</td><td>Windows only lets administrators open <code>\\.\PhysicalDriveN</code>.</td></tr>
+<tr><td>Hardware write blocker</td><td>Strongly recommended</td><td>DFX never writes to evidence, but a write blocker proves it.</td></tr>
+<tr><td>libewf-python</td><td>Optional</td><td>Needed only to open E01/Ex01 images: <code>pip install libewf-python</code></td></tr>
+<tr><td>ffmpeg</td><td>Optional</td><td>Used by two tests now, and by MP4 conversion in a later build.</td></tr>
+</table>
+<h3>Start the program</h3>
+<ol>
+ <li><b>Source version:</b> double-click <code>run_dfx.bat</code>, or right-click it and choose <b>Run as administrator</b> to read physical drives.<br>
+     <b>Release build:</b> double-click <code>DFX.exe</code>, or run it as administrator.</li>
+ <li>A console window opens showing <code>running at http://127.0.0.1:8788/</code>, and your browser opens DFX.</li>
+ <li>Keep the console window open while you work. Closing it stops DFX.</li>
+</ol>
+<div class="tip">DFX runs only on your own computer (<code>127.0.0.1</code>). Other computers on the network can't reach it. It uses port <b>8788</b> so it can run alongside FME on 8787.</div>
+<h3>Check the installation</h3>
+<pre><code>python -m dfx doctor</code></pre>
+<p>This shows the Python version, whether E01 support and ffmpeg were found, how many signatures loaded, and where your settings are stored.</p>
+
+<h2 id="quick">Quick start</h2>
+<ol>
+ <li><span class="tab">Home</span> → <span class="btn">New / Open Case</span>: choose an empty case folder, then enter the case number, examiner and agency.</li>
+ <li><span class="tab">Home</span> → <span class="btn">Image File</span> or <span class="btn">Physical Drive</span>: choose the evidence.</li>
+ <li><span class="tab">Home</span> → <span class="btn">Hash Evidence</span>: wait for MD5 and SHA-256 to appear in the side panel.</li>
+ <li><span class="tab">Carve</span>: tick the signatures to use. For a first pass, tick <b>Dry run</b> to see what would be found without copying anything.</li>
+ <li><span class="btn">Start Carve</span>: progress, speed and time remaining show in the status bar.</li>
+ <li><span class="tab">Results</span> → <span class="btn">Open Report</span>.</li>
+</ol>
+
+<h2 id="layout">Screen layout</h2>
+<div class="layout">
+ <div class="l1"><b>Title bar</b> &mdash; program name, version, current case number and examiner</div>
+ <div class="l2"><b>Tabs</b> &mdash; Home · Carve · Signatures · Results · Help</div>
+ <div class="l3"><b>Ribbon</b> &mdash; buttons and options for the selected tab, in labeled groups</div>
+ <div class="l4"><div><b>Side panel</b><br>Case · Evidence · Job</div><div><b>Work area</b><br>Contents of the selected tab</div></div>
+ <div class="l5"><b>Case log</b> &mdash; every action with a UTC time (also saved to <code>case_log.txt</code>)</div>
+ <div class="l6"><b>Status bar</b> &mdash; job state, progress bar, percent, bytes done, speed and time remaining</div>
+</div>
+<p>The <b>side panel</b> always shows:</p>
+<ul>
+ <li>the open case</li>
+ <li>the selected evidence (path, type, size, MD5, SHA-256)</li>
+ <li>the current job (hash or carve), with the number of items found and any error</li>
+</ul>
+
+<h2 id="home">Home tab</h2>
+<div class="ribbon">
+ <div class="g"><div><span>New / Open Case</span><span>Case Folder</span></div><small>Case</small></div>
+ <div class="g"><div><span>Image File</span><span>Physical Drive</span><span>Hash Evidence</span></div><small>Evidence</small></div>
+ <div class="g"><div><span>Go to Carve</span><span>User Manual</span></div><small>Next / Help</small></div>
+</div>
+<table>
+<tr><th>Button</th><th>What it does</th></tr>
+<tr><td><span class="btn">New / Open Case</span></td><td>Choose a case folder. A folder that already holds a <code>case.json</code> is reopened; any other folder becomes a new case. Enter the case number, examiner, agency and description; these print on every report. The last case opened is reopened automatically the next time DFX starts.</td></tr>
+<tr><td><span class="btn">Case Folder</span></td><td>Opens the case folder in File Explorer.</td></tr>
+<tr><td><span class="btn">Image File</span></td><td>Choose an evidence image with the built-in file browser, or type a full path and press Enter. Supported:
+  <ul>
+   <li>raw, dd, img and bin files</li>
+   <li>split images (choose the <code>.001</code> file; DFX joins the rest)</li>
+   <li>E01/Ex01, if libewf-python is installed</li>
+  </ul></td></tr>
+<tr><td><span class="btn">Physical Drive</span></td><td>Lists the drives Windows lets DFX open, with size and sector size. Click one to select it. If the list is empty, restart DFX <b>as administrator</b>.</td></tr>
+<tr><td><span class="btn">Hash Evidence</span></td><td>Calculates the MD5 and SHA-256 of the whole source. The results show in the side panel and go into <code>case_log.txt</code> and every report. Hashing a large drive takes about as long as reading it once.</td></tr>
+<tr><td><span class="btn">Go to Carve</span></td><td>Switches to the Carve tab.</td></tr>
+<tr><td><span class="btn">User Manual</span></td><td>Opens this manual in a new browser tab.</td></tr>
+</table>
+
+<h2 id="carve">Carve tab</h2>
+<div class="ribbon">
+ <div class="g"><div><span>Start Carve</span><span>Cancel</span><span>Resume Run</span></div><small>Run</small></div>
+ <div class="g"><div><span>Dry run · Sector-aligned · Max items</span><span>Start · End · Chunk (MB)</span></div><small>Options</small></div>
+</div>
+<p>The work area lists every signature. Tick the ones to use in this scan.</p>
+<ul>
+ <li>A red <b>No</b> in the Validated column means the signature hasn't been validated (see <a href="#validate">Validating signatures</a>).</li>
+ <li>A signature with problems is grayed out and can't be ticked until you fix it in the Signatures tab.</li>
+</ul>
+<h3>Run buttons</h3>
+<table>
+<tr><th>Button</th><th>What it does</th></tr>
+<tr><td><span class="btn">Start Carve</span></td><td>Starts a new run in <code>&lt;case&gt;\runs\carve_&lt;date&gt;_&lt;time&gt;</code>. Only one job (hash or carve) runs at a time.</td></tr>
+<tr><td><span class="btn">Cancel</span></td><td>Stops after the current chunk and saves a checkpoint. A report is still written; it says the scan was canceled.</td></tr>
+<tr><td><span class="btn">Resume Run</span></td><td>Lists canceled or interrupted runs. Choose one to continue from its last checkpoint, using the same signatures. See <a href="#resume">Cancel &amp; resume</a>.</td></tr>
+</table>
+<h3>Options</h3>
+<table>
+<tr><th>Option</th><th>Meaning</th><th>When to use</th></tr>
+<tr><td>Dry run</td><td>Finds and logs items with their offsets and lengths, but doesn't copy them out.</td><td>A first pass, to check signatures and see how much space you'll need.</td></tr>
+<tr><td>Sector-aligned only</td><td>Only accepts items that start on a sector boundary (usually 512 or 4096 bytes).</td><td>Formats that always start on a sector. Cuts false hits from patterns that happen to appear inside other data, and makes scans faster.</td></tr>
+<tr><td>Max items</td><td>Stops after this many items (0 = no limit).</td><td>Testing a new signature against a large drive.</td></tr>
+<tr><td>Start / End offset</td><td>The byte range to scan. Decimal or hex (<code>0x...</code>). Leave End blank for the end of the evidence.</td><td>Scanning one partition or a known area.</td></tr>
+<tr><td>Chunk (MB)</td><td>How much is read at a time (default 64).</td><td>Leave at 64 unless you're short on memory.</td></tr>
+</table>
+
+<h2 id="sigs">Signatures tab</h2>
+<div class="ribbon">
+ <div class="g"><div><span>New</span><span>Edit / Copy</span><span>Delete</span></div><small>Library</small></div>
+ <div class="g"><div><span>Import JSON</span><span>Export JSON</span></div><small>Exchange</small></div>
+ <div class="g"><div><span>Test on File</span></div><small>Check</small></div>
+</div>
+<p>The library lists the built-in signatures, which ship with DFX, and your <b>user</b> signatures, which are stored in <code>%APPDATA%\DFX\signatures</code>. Click a row to see its full definition.</p>
+<table>
+<tr><th>Button</th><th>What it does</th></tr>
+<tr><td><span class="btn">New</span></td><td>Opens a blank signature editor.</td></tr>
+<tr><td><span class="btn">Edit / Copy</span></td><td>Edits the selected user signature. On a built-in signature, it makes a user copy with the same ID, which replaces the built-in one from then on. Copies start out unvalidated.</td></tr>
+<tr><td><span class="btn">Delete</span></td><td>Deletes a user signature. Built-in signatures can't be deleted; deleting your copy brings the built-in one back.</td></tr>
+<tr><td><span class="btn">Import JSON</span></td><td>Loads one signature or a list from a <code>.json</code> file. Every imported signature is set to <b>unvalidated</b>, whatever the file says.</td></tr>
+<tr><td><span class="btn">Export JSON</span></td><td>Saves the selected signature, or the whole library if none is selected, to share with another examiner or keep with case notes.</td></tr>
+<tr><td><span class="btn">Test on File</span></td><td>Runs the signature currently in the editor against a sample file as a dry run (up to 100 items). See <a href="#testing">Testing a signature</a>.</td></tr>
+</table>
+
+<h3 id="editor">Signature editor</h3>
+<p>The fields shown change with the <b>Mode</b>. Fields that don't apply to the chosen mode are hidden.</p>
+<table>
+<tr><th>Field</th><th>Description</th></tr>
+<tr><td>ID</td><td>Short unique name: letters, digits, <code>-</code> and <code>_</code>. Carved files go in a folder with this name.</td></tr>
+<tr><td>Name</td><td>Display name, used in the results and the report.</td></tr>
+<tr><td>Extension</td><td>File extension given to carved items (for example <code>mp4</code>, <code>dav</code>).</td></tr>
+<tr><td>Mode</td><td>How the end of the item is found. See <a href="#modes">Carving modes</a>.</td></tr>
+<tr><td>Header (hex)</td><td>The bytes that identify the start, for example <code>44 48 41 56</code>. Use <code>??</code> for a byte that can be anything.</td></tr>
+<tr><td>Header offset</td><td>Where the header sits inside the item. Usually 0; MP4's <code>ftyp</code> is at 4.</td></tr>
+<tr><td>Footer (hex)</td><td>The bytes that mark the end. No wildcards.</td></tr>
+<tr><td>Bytes after footer</td><td>Extra bytes kept after the footer, for example the 4-byte length after Dahua's <code>dhav</code> trailer.</td></tr>
+<tr><td>Footer search</td><td><b>first</b> = the nearest footer; <b>last</b> = the furthest footer within the max size.</td></tr>
+<tr><td>If footer missing</td><td><b>skip</b> = don't carve; <b>maxsize</b> = take max size bytes and mark the item.</td></tr>
+<tr><td>Length field</td><td>Offset, size (1/2/4/8 bytes), byte order, adjust and multiplier. Length = value × multiplier + adjust, counted from the item start.</td></tr>
+<tr><td>Max gap between frames</td><td>Frame chain only: bytes allowed between frames. 0 = frames must follow each other directly.</td></tr>
+<tr><td>Channel field</td><td>Frame chain only: offset and size of the camera channel number in each frame header.</td></tr>
+<tr><td>Timestamp field</td><td>Frame chain only: offset, size, byte order and format (<code>unix</code>, <code>dahua_packed</code>, <code>filetime</code>) of the time in each frame header.</td></tr>
+<tr><td>Min / Max size</td><td>Items outside these sizes are rejected (or cut off at max size).</td></tr>
+<tr><td>Sector-aligned</td><td>This signature only accepts items starting on a sector boundary.</td></tr>
+<tr><td>Enabled by default</td><td>Ticked on the Carve tab automatically.</td></tr>
+<tr><td>Validated</td><td>Tick <b>only</b> after the signature has passed your validation tests with this DFX version.</td></tr>
+<tr><td>Notes</td><td>Where the signature came from and what it was tested against. Printed in the report.</td></tr>
+</table>
+<p>Click <span class="btn">Save</span>. If anything is wrong (bad hex, a missing length field, min larger than max), the problem appears in red under the buttons and nothing is saved.</p>
+
+<h3 id="testing">Testing a signature</h3>
+<ol>
+ <li>Open the signature in the editor (<span class="btn">New</span> or <span class="btn">Edit / Copy</span>).</li>
+ <li>Click <span class="btn">Test on File</span> and choose a file whose contents you know: an export from the recorder, or a small test image.</li>
+ <li>The results table shows each item's offset, length, status, frames, channels, first and last time, and notes. Nothing is copied.</li>
+ <li>Change the fields and test again until every known item is found with the right length and nothing extra appears.</li>
+</ol>
+<div class="tip">The test runs on what's in the editor, even before you save, so you can try changes safely.</div>
+
+<h2 id="results">Results tab</h2>
+<div class="ribbon">
+ <div class="g"><div><span>Refresh</span></div><small>Runs</small></div>
+ <div class="g"><div><span>Open Report</span><span>Rebuild Report</span><span>Open Run Folder</span></div><small>Output</small></div>
+</div>
+<p>The upper table lists every run in the case. The newest run is selected; click a row to select another. Each run's state is one of these:</p>
+<table>
+<tr><th>State</th><th>Meaning</th></tr>
+<tr><td>complete</td><td>The scan reached the end of its range.</td></tr>
+<tr><td>canceled - resumable</td><td>Stopped with Cancel. Use <span class="btn">Resume Run</span> on the Carve tab.</td></tr>
+<tr><td>running / interrupted</td><td>Still running, or DFX/Windows stopped before the run finished. Can be resumed from its checkpoint.</td></tr>
+<tr><td>dry run</td><td>Items were logged, not copied.</td></tr>
+</table>
+<p>The lower table lists the items in the selected run. For each item it shows:</p>
+<ul>
+ <li>the signature that found it</li>
+ <li>its offset (hex) and length</li>
+ <li>its status, and the frame count, channel and first/last device time for frame chains</li>
+ <li>the carved file's path and any notes</li>
+</ul>
+<table>
+<tr><th>Button</th><th>What it does</th></tr>
+<tr><td><span class="btn">Open Report</span></td><td>Opens the selected run's <code>report.html</code> in a new tab. Print it to PDF from the browser.</td></tr>
+<tr><td><span class="btn">Rebuild Report</span></td><td>Regenerates the report, for example after you hash the evidence or update case details.</td></tr>
+<tr><td><span class="btn">Open Run Folder</span></td><td>Opens the run folder in File Explorer.</td></tr>
+</table>
+<p>Item statuses:</p>
+<ul>
+ <li><b>carved</b>: copied out.</li>
+ <li><b>logged</b>: found in a dry run.</li>
+ <li><b>incomplete</b>: copied, but truncated or missing a required part (for example an MP4 with no <code>moov</code> box). Read the notes.</li>
+</ul>
+
+<h2 id="help">Help tab</h2>
+<div class="ribbon"><div class="g"><div><span>User Manual</span><span>About</span></div><small>Help</small></div></div>
+<p><span class="btn">User Manual</span> opens this manual. <span class="btn">About</span> shows the version, copyright, license and project status.</p>
+
+<h2 id="modes">Carving modes</h2>
+<table>
+<tr><th>Mode</th><th>How the end is found</th><th>Good for</th><th>Watch out for</th></tr>
+<tr><td><b>header_footer</b></td><td>Searches forward from the header for the footer, up to max size.</td><td>Formats with a reliable end marker.</td><td>If the item is fragmented, the footer found may belong to another file.</td></tr>
+<tr><td><b>header_length</b></td><td>Reads the size from a field in the header.</td><td>RIFF/AVI and similar formats.</td><td>A damaged header gives a wrong size; the min/max limits catch most of these.</td></tr>
+<tr><td><b>header_maxsize</b></td><td>Takes a fixed number of bytes.</td><td>A first look at formats you don't know yet.</td><td>Items include unrelated trailing data. Many false hits in random data with short headers.</td></tr>
+<tr><td><b>frame_chain</b></td><td>Reads each frame's length, jumps to the next frame and checks its header (and footer, if set), until the chain breaks.</td><td>DVR streams made of frames (Dahua DHAV).</td><td>A recording split by overwritten space comes out as several chains. Joining them by time comes in a later build.</td></tr>
+<tr><td><b>box_walk</b></td><td>Walks MP4/MOV top-level boxes (<code>ftyp</code>, <code>moov</code>, <code>mdat</code>…).</td><td>MP4, MOV and 3GP.</td><td>Files without <code>moov</code> are flagged as incomplete and may not play.</td></tr>
+</table>
+<p>A header hit that falls inside an item already carved with the same signature is skipped, so the 39 inner frames of a 40-frame chain aren't carved again.</p>
+
+<h2 id="fields">Signature fields (JSON)</h2>
+<pre><code>{
+  "id": "dahua-dhav",
+  "name": "Dahua DHAV frame chain",
+  "extension": "dav",
+  "enabled": false,
+  "header": "44 48 41 56",
+  "header_offset": 0,
+  "mode": "frame_chain",
+  "length_field": {"offset": 12, "size": 4, "endian": "little", "adjust": 0, "multiplier": 1},
+  "footer": "64 68 61 76",
+  "footer_tail": 4,
+  "footer_search": "first",
+  "on_missing_footer": "skip",
+  "chain_max_gap": 0,
+  "channel_field": {"offset": 6, "size": 1},
+  "timestamp_field": {"offset": 16, "size": 4, "endian": "little", "format": "dahua_packed"},
+  "min_size": 32,
+  "max_size": 4294967296,
+  "sector_aligned": false,
+  "align": 0,
+  "validated": false,
+  "notes": "Where it came from and what it was tested against"
+}</code></pre>
+<p>Hex may be written with spaces (<code>52 49 46 46</code>) or without (<code>52494646</code>). <code>align</code> = 0 uses the evidence's sector size.</p>
+
+<h2 id="builtin">Built-in signatures</h2>
+<table>
+<tr><th>ID</th><th>Format</th><th>Mode</th><th>Default</th><th>Notes</th></tr>
+<tr><td>mp4-iso</td><td>MP4 / MOV / 3GP</td><td>box_walk</td><td>On</td><td>Flags files with no <code>moov</code> box.</td></tr>
+<tr><td>avi-riff</td><td>AVI</td><td>header_length</td><td>On</td><td>RIFF size + 8. Files over 1 GB (OpenDML) are not joined.</td></tr>
+<tr><td>mkv-ebml</td><td>Matroska / WebM</td><td>header_maxsize</td><td>On</td><td>Takes max size bytes.</td></tr>
+<tr><td>asf-wmv</td><td>ASF / WMV</td><td>header_maxsize</td><td>On</td><td>Takes max size bytes.</td></tr>
+<tr><td>flv</td><td>Flash Video</td><td>header_maxsize</td><td>On</td><td>Takes max size bytes.</td></tr>
+<tr><td>hik-imkh</td><td>Hikvision export (IMKH)</td><td>header_maxsize</td><td>On</td><td>Takes max size bytes. A Hikvision-aware method comes later.</td></tr>
+<tr><td>dahua-dhav</td><td>Dahua DHAV frames</td><td>frame_chain</td><td><b>Off</b></td><td>Channel offset unconfirmed. Validate before enabling.</td></tr>
+</table>
+<div class="warn">All built-in signatures ship <b>unvalidated</b>.</div>
+
+<h2 id="output">Output files</h2>
+<pre><code>&lt;case folder&gt;\
+  case.json            case details
+  evidence.json        selected source and its hashes
+  case_log.txt         every action, UTC time
+  runs\
+    carve_20261126_101500\
+      carve_log.csv       one row per item (offsets, lengths, hashes, times, notes)
+      carve_session.json  source, range, options, exact signature definitions + their SHA-256, statistics
+      checkpoint.json     resume point
+      report.html         the report
+      carved\
+        mp4-iso\000001_off000000003011.mp4
+        dahua-dhav\000003_off0000000275C2.dav</code></pre>
+<p>Carved file names are <code>&lt;item number&gt;_off&lt;start offset in hex&gt;.&lt;ext&gt;</code>, so every file can be traced back to its location in the evidence.</p>
+
+<h2 id="report">The report</h2>
+<p><code>report.html</code> contains:</p>
+<ul>
+ <li>Warnings at the top: early-development build, unvalidated signatures used, canceled scan, dry run.</li>
+ <li><b>Case</b>: number, examiner, agency, description.</li>
+ <li><b>Evidence</b>: path, type, size, sector size, MD5/SHA-256 with the time they were calculated, and a read-only statement.</li>
+ <li><b>Scan</b>: range, start and finish times (UTC), elapsed time, bytes scanned, items, rejected hits, alignment, signature set SHA-256.</li>
+ <li><b>Signatures</b>: each one used, its mode, header, footer, validation state and item count.</li>
+ <li><b>Items</b>: offset (hex and decimal), length, status, frames, channel, first and last device time, file path, MD5, SHA-256, notes.</li>
+ <li><b>Signature definitions used</b>: the full JSON, so the scan can be repeated exactly.</li>
+</ul>
+
+<h2 id="resume">Cancel &amp; resume</h2>
+<p>DFX saves a checkpoint every 15 seconds and when a scan stops. To continue a run:</p>
+<ol>
+ <li>Open the same case and select the same evidence.</li>
+ <li>Carve tab → <span class="btn">Resume Run</span> → choose the run.</li>
+ <li>The scan continues from the checkpoint and adds to the same <code>carve_log.csv</code>.</li>
+</ol>
+<p>Resume refuses to continue if:</p>
+<ul>
+ <li>the evidence size doesn't match, or</li>
+ <li>the signature definitions changed since the checkpoint (DFX compares their SHA-256).</li>
+</ul>
+<p>In either case, start a new run instead.</p>
+
+<h2 id="cli">Command line</h2>
+<pre><code>python -m dfx gui     [--port 8788] [--no-browser]
+python -m dfx carve   SOURCE OUT_DIR [--sig ID ...] [--all] [--dry-run] [--aligned]
+                      [--start N] [--end N] [--chunk-mb 64] [--max-items N] [--resume]
+python -m dfx hash    SOURCE
+python -m dfx sigs    [--check FILE.json]
+python -m dfx drives
+python -m dfx doctor</code></pre>
+<table>
+<tr><th>Example</th><th>Does</th></tr>
+<tr><td><code>python -m dfx carve E:\img\dvr.001 D:\cases\123\carve1 --dry-run</code></td><td>Dry run with the default (enabled) signatures</td></tr>
+<tr><td><code>python -m dfx carve \\.\PhysicalDrive2 D:\cases\123\c2 --sig dahua-dhav --aligned</code></td><td>Dahua frame chains only, sector-aligned, from a physical drive (run as administrator)</td></tr>
+<tr><td><code>python -m dfx carve E:\img\dvr.E01 D:\cases\123\c1 --resume</code></td><td>Resume an interrupted command-line run</td></tr>
+<tr><td><code>python -m dfx sigs --check my_sigs.json</code></td><td>Check a signature file for errors</td></tr>
+</table>
+<p>The release build uses <code>DFX.exe</code> in place of <code>python -m dfx</code>.</p>
+
+<h2 id="validate">Validating signatures</h2>
+<p>A signature should be marked <b>Validated</b> only when you can show it works on data whose contents you already know. A suggested procedure:</p>
+<ol>
+ <li>Use a recorder you control, of the same make and family. Set its clock from NTP and note the time.</li>
+ <li>Record known events: point a camera at a screen showing an NTP-synced clock, and record set windows (for example channel 1, 10:00:00–10:05:00).</li>
+ <li>Export the same clips with the recorder's own software.</li>
+ <li>Image the drive through a write blocker and hash it.</li>
+ <li>Run DFX on the image with only the signature being validated.</li>
+ <li>Confirm that:
+  <ul>
+   <li>every known recording was found, with the right channel and device times</li>
+   <li>the carved data matches byte-for-byte where an exported copy exists</li>
+   <li>there are no unexplained extra items</li>
+  </ul></li>
+ <li>Record the DFX version, signature JSON, image hash and results (the Forensic Tool Validator can hold this), then tick <b>Validated</b> and note the test in <b>Notes</b>.</li>
+ <li>Repeat after any change to the signature or any new DFX version.</li>
+</ol>
+
+<h2 id="evidence">Evidence handling</h2>
+<ul>
+ <li>DFX opens every source read-only. There is no code path that writes to the source.</li>
+ <li>Still use a hardware write blocker for physical drives, and prefer working from a verified image.</li>
+ <li>Hash the evidence in DFX and compare it with your acquisition hash before carving.</li>
+ <li>Keep the case folder on a different drive from the evidence.</li>
+ <li>Some DVRs format drives with a 4096-byte sector size. DFX reads the sector size from Windows and shows it on the report.</li>
+</ul>
+
+<h2 id="time">Device times</h2>
+<p>Times shown for frame chains are decoded exactly as the recorder wrote them. DFX applies <b>no time zone and no clock-offset correction</b>. A DVR's clock is often wrong. Measure the recorder's offset against a trusted time source and record it separately. Clock-offset correction will come with the timeline feature in a later build.</p>
+
+<h2 id="trouble">Troubleshooting</h2>
+<table>
+<tr><th>Problem</th><th>Fix</th></tr>
+<tr><td>Physical Drive list is empty</td><td>Close DFX and start it with <b>Run as administrator</b>. Check that the write blocker shows the drive in Disk Management.</td></tr>
+<tr><td>"E01 support needs the optional package libewf-python"</td><td><code>pip install libewf-python</code>, or convert the image to raw.</td></tr>
+<tr><td>Browser shows "can't reach this page"</td><td>The console window was closed. Start DFX again.</td></tr>
+<tr><td>"Address already in use" in the console</td><td>Another DFX is already running; use that one, or start with <code>--port 8790</code>.</td></tr>
+<tr><td>"... already holds a carve; choose a new output folder or resume"</td><td>The command line won't overwrite a run. Use a new output folder or add <code>--resume</code>. (The GUI always makes a new run folder.)</td></tr>
+<tr><td>"signatures changed since the checkpoint"</td><td>A signature was edited after the run started. Start a new run.</td></tr>
+<tr><td>Thousands of tiny or junk items</td><td>The header is too short or too common. Lengthen the header, set a sensible min size, use Sector-aligned only, or use header_length/frame_chain instead of header_maxsize.</td></tr>
+<tr><td>"footer not found within max size"</td><td>Raise max size, or set <i>If footer missing</i> to maxsize. The file may also be fragmented.</td></tr>
+<tr><td>Carved MP4 won't play</td><td>Check the notes. "no moov box" means the index is missing (the recording was probably interrupted or overwritten). Repair is planned for a later build.</td></tr>
+<tr><td>Scan is slow</td><td>A spinning hard drive usually reads at 120–250 MB/s, and DFX is limited by the drive. Image the drive to an SSD first, or limit the range.</td></tr>
+</table>
+
+<h2 id="faq">FAQ</h2>
+<p><b>Does DFX convert DVR video to MP4?</b><br>Not in this build. It copies out the original data. Conversion with DVR timestamps is planned for Build 3.</p>
+<p><b>Does DFX read the DVR's own filesystem (file list, deleted entries)?</b><br>Not yet. This build carves by signature across the whole drive. Filesystem parsing is planned for Builds 4–5.</p>
+<p><b>Can I share signatures?</b><br>Yes. Use <span class="btn">Export JSON</span>. The person who receives them should treat them as unvalidated until they test them on their own data.</p>
+<p><b>Where are settings kept?</b><br><code>%APPDATA%\DFX</code>: <code>settings.json</code> (last case) and <code>signatures\</code> (user signatures).</p>
+
+<h2 id="license">License</h2>
+<p>Copyright &copy; 2026 Christopher A. Tankelewicz (ThinkTank4n6). Released under the MIT License. The software is provided "as is", without warranty of any kind. You are responsible for validating it before relying on its results.</p>
+</main>
+</div>
+<script>
+fetch("/api/state").then(r=>r.json()).then(s=>{if(s.version)document.getElementById("ver").textContent=s.version}).catch(()=>{});
+</script>
+</body>
+</html>

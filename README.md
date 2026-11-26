@@ -1,6 +1,12 @@
 # DVR Forensic Extractor (DFX)
 
-**Version 2026.11.1 — Build 1: carving engine**
+> [!WARNING]
+> **New project — not yet tested on real DVR evidence.**
+> This is an early development build. It has only been tested against synthetic test images, not against drives or exports from real DVR/NVR recorders. Every built-in signature is unvalidated, and the Dahua DHAV offsets are partly unconfirmed. **Do not use it for casework** or rely on its results until it has been validated against known test data from real recorders.
+
+**Version 2026.11.2 — Build 1: carving engine + User Manual**
+
+The full User Manual is built into the program (ribbon → **User Manual**) and is also at [`dfx/web/manual.html`](dfx/web/manual.html).
 
 DFX reads DVR/NVR hard drives and drive images read-only and carves video using a signature library that you can edit. It is the first part of a DVR examination tool: the later builds add a signature learner, Dahua and Hikvision stream rebuilding, MP4 output with DVR timestamps, and drive filesystem parsing.
 

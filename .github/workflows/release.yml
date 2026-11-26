@@ -25,6 +25,8 @@ jobs:
           (Get-FileHash "DFX-$v-windows.zip" -Algorithm SHA256).Hash.ToLower() + "  DFX-$v-windows.zip" | Out-File -Encoding ascii "DFX-$v-windows.zip.sha256"
       - uses: softprops/action-gh-release@v2
         with:
+          prerelease: true
+          body: "Early development build - NOT yet tested on real DVR evidence. Do not use for casework. See README."
           files: |
             DFX-*-windows.zip
             DFX-*-windows.zip.sha256
