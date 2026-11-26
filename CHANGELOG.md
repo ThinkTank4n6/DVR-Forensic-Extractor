@@ -2,6 +2,11 @@
 
 All versions are early development builds, **not yet tested on real DVR evidence**.
 
+## v2026.11.7 - vendored files stay byte-identical on Windows
+- **Found by GitHub's Windows test run:** Git for Windows (`core.autocrlf`) checked out `ewfprobe.py` and `mediacarve.py` with CRLF line endings, so their SHA-256 no longer matched `vendored.json` and the byte-identical test failed (correctly). The release build would have bundled the converted copies.
+- New `.gitattributes`: `dfx/vendor/** -text`, so Git never converts the vendored files. Verified with a real `core.autocrlf=true` clone: README converts to CRLF, the vendored files stay byte-identical; without the file, both fail.
+- `doctor` and the test now say *why* a vendored file differs (for example "line endings were converted to CRLF").
+
 ## v2026.11.6 - Windows file locking
 - **Found on the examiner's Windows workstation:** a saved clock measurement was lost (39 of 40) because Windows briefly locks a freshly written file (Defender, Search indexer) and `os.replace` failed with "Access is denied". The same call saves the carve checkpoint every 15 s, so a long scan could crash the same way.
 - New `dfx/fsutil.replace_retry`: retries a transient Windows lock with backoff (up to ~3 s). Used for the DVR records file, the checkpoint, carved-file renames and crash recovery. A checkpoint that still can't be saved is logged and retried at the next one; the scan continues. Temp files are cleaned up on failure.

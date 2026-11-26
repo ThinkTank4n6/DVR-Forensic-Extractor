@@ -16,7 +16,26 @@ from tests.fixtures import build_image, ffmpeg_ok
 def test_vendored_files_are_byte_identical():
     res = vendored.verify()
     assert {r["name"] for r in res} == {"mediacarve", "ewfprobe"}
-    assert all(r["ok"] for r in res), res
+    bad = [f"{r['name']}: {r['reason']} (got {r['actual'][:16]})" for r in res if not r["ok"]]
+    assert not bad, "; ".join(bad)
+
+
+def test_crlf_conversion_is_diagnosed(tmp_path, monkeypatch):
+    import shutil
+    d = tmp_path / "vendor"
+    shutil.copytree(vendored.VENDOR_DIR, d)
+    p = d / "mediacarve.py"
+    p.write_bytes(p.read_bytes().replace(b"\n", b"\r\n"))       # what Git for Windows did
+    monkeypatch.setattr(vendored, "VENDOR_DIR", d)
+    r = {x["name"]: x for x in vendored.verify()}
+    assert r["ewfprobe"]["ok"] and not r["mediacarve"]["ok"]
+    assert "CRLF" in r["mediacarve"]["reason"]
+
+
+def test_gitattributes_protects_vendor_folder():
+    from pathlib import Path
+    ga = (Path(__file__).resolve().parent.parent / ".gitattributes").read_text()
+    assert "dfx/vendor/** -text" in ga
 
 
 def _sigs(tmp_path, ids):

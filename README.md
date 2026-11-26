@@ -4,7 +4,7 @@
 > **New project — not yet tested on real DVR evidence.**
 > This is an early development build. It has only been tested against synthetic test images, not against drives or exports from real DVR/NVR recorders. Every built-in signature is unvalidated, and the Dahua DHAV offsets are partly unconfirmed. **Do not use it for casework** or rely on its results until it has been validated against known test data from real recorders.
 
-**Version 2026.11.6 — Build 1 + E01 built in (ewfprobe) + mediacarve length judge**
+**Version 2026.11.7 — Build 1 + E01 built in (ewfprobe) + mediacarve length judge**
 
 The full User Manual is built into the program (ribbon → **User Manual**) and is also at [`dfx/web/manual.html`](dfx/web/manual.html).
 

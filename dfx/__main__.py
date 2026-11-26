@@ -94,7 +94,7 @@ def main(argv=None):
         from . import vendored
         vend = vendored.verify()
         for v in vend:
-            print(f"  {v['name']:<12} {v['version']:<8} {'OK (byte-identical)' if v['ok'] else 'CHANGED - SHA-256 does not match vendored.json'}")
+            print(f"  {v['name']:<12} {v['version']:<8} {'OK (byte-identical)' if v['ok'] else 'CHANGED - ' + v['reason']}")
         try:
             vendored.ewfprobe(), vendored.mediacarve()
             print("  E01 / length judge ...... loaded")

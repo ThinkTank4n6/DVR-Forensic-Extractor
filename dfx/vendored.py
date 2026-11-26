@@ -46,11 +46,22 @@ def manifest() -> dict:
 
 
 def verify() -> list[dict]:
-    """[{name, version, ok, expected, actual}] for every vendored file."""
+    """[{name, version, ok, expected, actual, reason}] for every vendored file."""
     out = []
     for e in manifest()["vendored"]:
         p = VENDOR_DIR / e["path"]
-        actual = hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else "missing"
+        reason = ""
+        if not p.exists():
+            actual, reason = "missing", "file is missing"
+        else:
+            data = p.read_bytes()
+            actual = hashlib.sha256(data).hexdigest()
+            if actual != e["sha256"]:
+                if b"\r\n" in data and hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest() == e["sha256"]:
+                    reason = ("line endings were converted to CRLF (Git for Windows core.autocrlf); "
+                              "the repository's .gitattributes must keep dfx/vendor/** -text")
+                else:
+                    reason = "contents differ from the vendored release"
         out.append({"name": e["name"], "version": e.get("version", ""), "ok": actual == e["sha256"],
-                    "expected": e["sha256"], "actual": actual})
+                    "expected": e["sha256"], "actual": actual, "reason": reason})
     return out

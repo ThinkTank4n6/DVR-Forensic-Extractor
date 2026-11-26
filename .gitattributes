@@ -1,0 +1,8 @@
+# Vendored third-party files must stay byte-identical to their authors' releases
+# (dfx/vendor/vendored.json records their SHA-256). Never convert line endings:
+# Git for Windows (core.autocrlf) would otherwise check them out with CRLF.
+dfx/vendor/** -text
+
+# Test fixtures and images are binary.
+*.img binary
+*.E0[0-9] binary
