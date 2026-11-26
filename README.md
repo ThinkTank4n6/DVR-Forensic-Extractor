@@ -4,7 +4,7 @@
 > **New project — not yet tested on real DVR evidence.**
 > This is an early development build. It has only been tested against synthetic test images, not against drives or exports from real DVR/NVR recorders. Every built-in signature is unvalidated, and the Dahua DHAV offsets are partly unconfirmed. **Do not use it for casework** or rely on its results until it has been validated against known test data from real recorders.
 
-**Version 2026.11.9 — Build 2: signature learner + hex viewer — Build 1 + E01 built in (ewfprobe) + mediacarve length judge**
+**Version 2026.11.10 — Build 2: signature learner + hex viewer — Build 1 + E01 built in (ewfprobe) + mediacarve length judge**
 
 The full User Manual is built into the program (ribbon → **User Manual**) and is also at [`dfx/web/manual.html`](dfx/web/manual.html).
 
@@ -30,6 +30,7 @@ Copyright (c) 2026 Christopher A. Tankelewicz (ThinkTank4n6). MIT License, provi
 | `header_maxsize` | Fixed `max_size` bytes |
 | `frame_chain` | Follows frame after frame using each frame's length field. Records the frame count, channels and first/last device time |
 | `box_walk` | MP4/MOV/3GP: walks the top-level boxes and flags files that have no `moov` box |
+| `asf_walk` | ASF/WMV (Dahua `.asf` exports): walks header, data and index objects; reports the header's file size, creation date and duration |
 
 * **Scanning**
   * 64 MB chunks that overlap, so a header split across two chunks is still found

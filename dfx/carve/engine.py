@@ -21,6 +21,7 @@ from pathlib import Path
 from ..source import Source
 from .signatures import hex_literal, hex_to_regex, normalize, clean_for_record, parse_hex
 from . import judge as _judge
+from . import asf as _asf
 from ..fsutil import replace_retry
 
 MB = 1024 * 1024
@@ -285,6 +286,20 @@ class Carver:
             note += "; no media data box"
         return pos, note
 
+    def _end_asf_walk(self, s, start):
+        limit = min(start + int(s["max_size"]), self.src.size)
+        res = _asf.walk(self.src.read_full, start, limit)
+        if res is None:
+            return None, "not a valid ASF object sequence"
+        end, note = res["end"], _asf.describe(res, start)
+        # an old export overwritten by a newer one still declares its full size:
+        # a new ASF header inside it means the newer file starts there
+        nxt = self._next_header(s, start, end)
+        if nxt is not None:
+            return nxt, (f"end estimated: another ASF file starts inside at 0x{nxt:X} - probably overwritten; "
+                         f"cut there ({note})")
+        return end, note
+
     def _walk_chain(self, s, start):
         lf = s["length_field"]
         hdr_re = s["_re"]
@@ -389,6 +404,8 @@ class Carver:
             end, note = self._end_maxsize(s, start)
         elif mode == "box_walk":
             end, note = self._end_box_walk(s, start)
+        elif mode == "asf_walk":
+            end, note = self._end_asf_walk(s, start)
         elif mode == "frame_chain":
             end, note, meta = self._walk_chain(s, start)
         else:

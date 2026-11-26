@@ -94,3 +94,41 @@ def test_failed_self_test_is_reported():
     r = learn(bad)
     assert r["signature"]["mode"] != "frame_chain"
     assert any("no length field explains" in w for w in r["warnings"])
+
+
+def _with_file_header(frames: bytes, rnd) -> bytes:
+    """An export: a 64-byte file header (its own magic + metadata), then the DHAV frames."""
+    return b"DAHUAEXP" + rnd.randbytes(56) + frames
+
+
+def test_frames_after_a_file_header_are_found():
+    rnd = random.Random(11)
+    s = [sample_from_bytes(f"exp{c}.dav", _with_file_header(dhav_chain(30, c, start_sec=c * 5), rnd)) for c in (1, 2, 3)]
+    r = learn(s)
+    sig = r["signature"]
+    assert sig["mode"] == "frame_chain" and sig["header"] == "44 48 41 56"
+    assert sig["length_field"]["offset"] == 12
+    assert any(f["what"] == "file header before frames" and "64 bytes" in f["value"] for f in r["findings"])
+    assert r["self_test"]["passed"], r["self_test"]
+
+
+@pytest.mark.skipif(not ffmpeg_ok(), reason="ffmpeg not installed")
+def test_standard_mp4_is_recognized(tmp_path):
+    files = []
+    for i in range(2):
+        p = tmp_path / f"exp{i}.mp4"
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+                        f"testsrc=size=96x64:rate=5:duration={i + 1}", "-c:v", "mjpeg", str(p)], check=True)
+        files.append(sample_from_file(str(p)))
+    r = learn(files)
+    assert r["recognized"] == {"kind": "mp4", "builtin": "mp4-iso"}
+    assert "built-in signature 'mp4-iso'" in r["warnings"][0]
+
+
+def test_estimated_mode_self_test_is_honest():
+    rnd = random.Random(2)
+    s = [sample_from_bytes(f"z{i}", b"ZZQ1" + rnd.randbytes(800 + 100 * i)) for i in range(3)]
+    r = learn(s)
+    assert r["signature"]["mode"] == "header_maxsize"
+    assert r["self_test"]["estimated"] and r["self_test"]["passed"]
+    assert not any("Self-test failed" in w for w in r["warnings"])

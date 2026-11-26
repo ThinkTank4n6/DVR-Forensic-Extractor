@@ -33,6 +33,7 @@ from .carve.engine import decode_timestamp
 SAMPLE_CAP = 64 * 1024 * 1024     # bytes analyzed per sample (frames); size/tail always exact
 HEADER_SPAN = 16                  # bytes of header considered
 MIN_FRAMES = 3
+MAX_FILE_HEADER = 4096            # frames may start after a file header this long (Dahua/Hikvision exports)
 FRAMES_PER_SAMPLE = 2000          # frames per sample used for field analysis (bounds the time taken)
 
 
@@ -225,12 +226,19 @@ def _channel_candidates(per_sample_frames: list[list[bytes]], max_off: int = 16)
     return out
 
 
-def _analyze_frames(samples, marker):
-    """None if `marker` isn't a frame stream; else (frame_mode|None, findings, warnings, frame_header)."""
+def _analyze_frames(samples, marker, max_lead: int = 0):
+    """None if `marker` isn't a frame stream; else (frame_mode|None, findings, warnings, frame_header).
+    max_lead > 0 allows a file header before the first frame."""
     per_sample_pos = [_positions(s.head, marker) for s in samples]
-    if not all(p and p[0] == 0 and len(p) >= MIN_FRAMES for p in per_sample_pos):
+    if not all(p and p[0] <= max_lead and len(p) >= MIN_FRAMES for p in per_sample_pos):
         return None
     findings, warnings = [], []
+    leads = sorted({p[0] for p in per_sample_pos})
+    if leads != [0]:
+        findings.append({"what": "file header before frames",
+                         "value": ", ".join(f"{x:,} bytes" for x in leads),
+                         "evidence": "each sample starts with a file header, then the frames; the signature describes "
+                                     "the frames (what a DVR drive holds), not the export's file header"})
     frames, ends, frame_heads, per_sample_frames = [], [], [], []
     for s, pos in zip(samples, per_sample_pos):
         bounds = pos + ([s.size] if s.complete else [])
@@ -245,7 +253,9 @@ def _analyze_frames(samples, marker):
         per_sample_frames.append(sf)
     nfr = sum(len(p) for p in per_sample_pos)
     findings.append({"what": "frame marker", "value": _hex(marker),
-                     "evidence": f"repeats {nfr:,} times across the samples, always at sample start: a stream of frames"
+                     "evidence": f"repeats {nfr:,} times across the samples"
+                                 + (", always at sample start" if leads == [0] else ", starting after the file header")
+                                 + ": a stream of frames"
                                  + (f" (fields checked on the first {FRAMES_PER_SAMPLE:,} frames of each sample)"
                                     if any(len(p) > FRAMES_PER_SAMPLE for p in per_sample_pos) else "")})
     fhdr = _header_from(_pattern(frame_heads, HEADER_SPAN))
@@ -285,6 +295,56 @@ def _analyze_frames(samples, marker):
     return fm, findings, warnings, fhdr
 
 
+def _offset_marker_candidates(samples, limit: int = 12):
+    """4-byte markers that repeat in every sample, first seen within MAX_FILE_HEADER bytes."""
+    from collections import Counter
+    win = samples[0].head[:256 * 1024]
+    counts = Counter(win[i:i + 4] for i in range(0, max(0, len(win) - 3)))
+    first = {}
+    for i in range(0, min(MAX_FILE_HEADER, len(win) - 3)):
+        first.setdefault(win[i:i + 4], i)
+    cands = [g for g, i in first.items()
+             if counts[g] >= MIN_FRAMES and len(set(g)) > 1 and i > 0
+             and all(s.head.find(g, 0, MAX_FILE_HEADER + 4) >= 0 for s in samples[1:])]
+    cands.sort(key=lambda g: (-counts[g], first[g]))
+    return cands[:limit]
+
+
+def recognize_standard(samples) -> dict | None:
+    """If every sample is a standard container mediacarve fully understands, say so:
+    the built-in signature already recovers it and no learned signature is needed."""
+    import io
+    from . import vendored
+    builtin = {"mp4": "mp4-iso", "avi": "avi-riff", "mkv": "mkv-ebml"}
+    try:
+        mc = vendored.mediacarve()
+    except RuntimeError:
+        return None
+    kinds = set()
+    for s in samples:
+        if not s.complete:
+            return None
+        hit = next(iter(mc.carve(io.BytesIO(s.head), kinds=mc.VIDEO_KINDS, start=0, end=64, nested=True)), None)
+        if hit is None or hit.offset != 0 or hit.bounded not in ("header", "parsed"):
+            return None
+        kinds.add(hit.kind)
+    if len(kinds) != 1:
+        return None
+    k = kinds.pop()
+    return {"kind": k, "builtin": builtin.get(k)}
+
+
+def _recognize_asf(samples) -> dict | None:
+    from .carve import asf
+    for s in samples:
+        if not s.complete:
+            return None
+        res = asf.walk(lambda o, n, b=s.head: b[o:o + n], 0, s.size)
+        if not res or res["end"] != s.size:
+            return None
+    return {"kind": "asf", "builtin": "asf-wmv"}
+
+
 def learn(samples: list[Sample], sig_id: str = "", name: str = "") -> dict:
     findings, warnings = [], []
     if not samples:
@@ -306,9 +366,11 @@ def learn(samples: list[Sample], sig_id: str = "", name: str = "") -> dict:
         if v is None:
             break
         lead += bytes([v])
-    if len(lead) < 2:
-        raise ValueError("the samples don't share a common first bytes; they may not be the same format, "
-                         "or the selections don't start at the file/frame start")
+    recognized = recognize_standard(samples) or _recognize_asf(samples)
+    if recognized:
+        warnings.insert(0, f"These are standard {recognized['kind'].upper()} files: DFX's built-in signature "
+                           f"'{recognized['builtin']}' already recovers them, with exact lengths from mediacarve. "
+                           "You don't need a learned signature for them.")
     findings.append({"what": "header", "value": _hex_pattern(hdr),
                      "evidence": f"first bytes of all {len(samples)} samples"
                                  + (f"; ?? = bytes that differ between samples" if None in hdr else "")})
@@ -317,13 +379,17 @@ def learn(samples: list[Sample], sig_id: str = "", name: str = "") -> dict:
     #    Try the shortest plausible marker first: a longer one can include a
     #    frame-type byte (DHAV FD = keyframe only) and miss most frames.
     frame_mode, fallback = None, None
-    for mlen in range(4, min(8, len(lead)) + 1):
-        res = _analyze_frames(samples, lead[:mlen])
+    tries = [(lead[:mlen], 0) for mlen in range(4, min(8, len(lead)) + 1)]
+    if not recognized:
+        tries += [(g, MAX_FILE_HEADER) for g in _offset_marker_candidates(samples)]
+    for marker, max_lead in tries:
+        res = _analyze_frames(samples, marker, max_lead)
         if res is None:
             continue
         if res[0] is not None:                   # a length field explains the frames
             fallback = None
             fm, fnd, wrn, fhdr = res
+            lead = marker
             findings[:] = [f for f in findings if f["what"] != "header"]   # frame header replaces it
             findings.extend(fnd)
             warnings.extend(wrn)
@@ -333,6 +399,9 @@ def learn(samples: list[Sample], sig_id: str = "", name: str = "") -> dict:
     if fallback:
         findings.extend(fallback[1])
         warnings.extend(fallback[2])
+    if len(lead) < 2 and not frame_mode:
+        raise ValueError("the samples don't share common first bytes or a repeating frame marker; they may not "
+                         "be the same format, or the selections don't start at the file/frame start")
 
     if frame_mode:
         hdr = _mask_fields(hdr, [frame_mode.get("length_field"), frame_mode.get("timestamp_field")])
@@ -349,7 +418,7 @@ def learn(samples: list[Sample], sig_id: str = "", name: str = "") -> dict:
         # 3. whole-file length field
         lf = None
         if all(s.complete or len(s.head) >= 96 for s in samples):
-            lf = _find_length_field([(s.head[:96], s.size) for s in samples])
+            lf = _find_length_field([(s.head[:160], s.size) for s in samples], max_off=128)
             if lf and len(samples) < 2 and lf[3] not in (0, 8):
                 lf = None
         # 4. file footer
@@ -380,24 +449,35 @@ def learn(samples: list[Sample], sig_id: str = "", name: str = "") -> dict:
             f["value"] = sig["header"]
     if len(_hex_pattern(hdr).replace("??", "").split()) < 4:
         warnings.append("The header has fewer than 4 fixed bytes; expect false hits in unallocated space.")
-    test = self_test(sig, samples)
-    if not test["passed"]:
+    # where each item really starts inside its sample: after any file header
+    skip = [s.head.find(lead) if frame_mode else 0 for s in samples]
+    test = self_test(sig, samples, skip=skip)
+    if test.get("estimated"):
+        if test["passed"]:
+            warnings.append("Self-test: every sample was found at its start. In this mode the end can only be "
+                            "estimated, so lengths are not expected to match exactly.")
+        else:
+            warnings.append("Self-test failed: not every sample was found at its start. See the self-test table.")
+    elif not test["passed"]:
         warnings.append("Self-test failed: the draft does not recover every sample exactly. See the self-test table.")
     return {"signature": sig, "findings": findings, "warnings": warnings, "self_test": test,
+            "recognized": recognized,
             "samples": [{"name": s.name, "size": s.size, "origin": s.origin} for s in samples]}
 
 
-def self_test(sig: dict, samples: list[Sample], seed: int = 7) -> dict:
-    """Plant every (complete) sample in random data, carve with `sig`, compare."""
+def self_test(sig: dict, samples: list[Sample], seed: int = 7, skip: list[int] | None = None) -> dict:
+    """Plant every (complete) sample in random data, carve with `sig`, compare.
+    skip[i] = bytes of file header before the item the signature describes."""
     from .carve import Carver, CarveOptions
     from .source import open_source
     rnd = random.Random(seed)
-    usable = [s for s in samples if s.complete]
+    skip = skip or [0] * len(samples)
+    usable = [(s, k) for s, k in zip(samples, skip) if s.complete]
     if not usable:
         return {"passed": False, "results": [], "note": "no sample small enough to plant (all over the analysis cap)"}
     blob, planted = bytearray(rnd.randbytes(4096 + 13)), []
-    for s in usable:
-        planted.append((s.name, len(blob), s.size))
+    for s, k in usable:
+        planted.append((s.name, len(blob) + k, s.size - k))
         blob += s.head
         blob += rnd.randbytes(4096 + rnd.randrange(4096))
     with tempfile.TemporaryDirectory() as td:
@@ -407,12 +487,13 @@ def self_test(sig: dict, samples: list[Sample], seed: int = 7) -> dict:
             c = Carver(src, [sig], CarveOptions(out_dir=str(Path(td) / "o"), dry_run=True))
             c.run()
     got = {i.start: i for i in c.items}
+    estimated = sig.get("mode") == "header_maxsize"
     results = []
     for nm, at, ln in planted:
         it = got.get(at)
-        ok = it is not None and it.length == ln
+        ok = it is not None and (estimated or it.length == ln)
         results.append({"sample": nm, "offset": at, "length": ln, "found": it is not None,
                         "carved_length": it.length if it else 0, "ok": ok})
     extra = [i.start for i in c.items if i.start not in {p[1] for p in planted}]
     return {"passed": all(r["ok"] for r in results) and not extra, "results": results,
-            "extra_hits": len(extra)}
+            "extra_hits": len(extra), "estimated": estimated}

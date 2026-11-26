@@ -329,7 +329,7 @@ function editor(){
     ${f("eId","ID",s.id,"Letters, digits, - and _. Same ID as a built-in replaces it.")}
     ${f("eName","Name",s.name)}
     ${f("eExt","Extension",s.extension)}
-    <label>Mode</label><select id="eMode">${["header_footer","header_length","header_maxsize","frame_chain","box_walk"].map(m=>`<option ${m===s.mode?"selected":""}>${m}</option>`).join("")}</select>
+    <label>Mode</label><select id="eMode">${["header_footer","header_length","header_maxsize","frame_chain","box_walk","asf_walk"].map(m=>`<option ${m===s.mode?"selected":""}>${m}</option>`).join("")}</select>
     ${f("eHeader","Header (hex)",s.header,"?? = any byte")}
     ${f("eHOff","Header offset",s.header_offset,"Where the header sits inside the item (MP4 ftyp = 4)","number")}
     <div class="m-foot" style="display:contents">
@@ -861,10 +861,11 @@ function learnerCard(){
    ${r?`<h2 style="margin-top:14px">Findings</h2><table><tr><th>What</th><th>Value</th><th>Evidence</th></tr>
       ${r.findings.map(f=>`<tr><td>${esc(f.what)}</td><td class="mono">${esc(f.value)}</td><td>${esc(f.evidence)}</td></tr>`).join("")}</table>
       ${r.warnings.map(w=>`<div class="notes"><div>${esc(w)}</div></div>`).join("")}
-      <h2 style="margin-top:14px">Self-test ${r.self_test.passed?'<span class="pill ok">passed</span>':'<span class="pill no">failed</span>'}</h2>
+      ${r.recognized?`<div class="card" style="border-left:4px solid #2e7d4f;background:#e3f3ea;margin-top:10px"><b>Standard ${esc(r.recognized.kind.toUpperCase())} files.</b> The built-in signature <b>${esc(r.recognized.builtin||"")}</b> already recovers these with exact lengths. A learned signature isn't needed.</div>`:""}
+      <h2 style="margin-top:14px">Self-test ${r.self_test.passed?(r.self_test.estimated?'<span class="pill ok">found (lengths estimated)</span>':'<span class="pill ok">passed</span>'):'<span class="pill no">failed</span>'}</h2>
       <p class="muted">Each sample was planted in random data and carved back with the draft signature.${r.self_test.extra_hits?` ${r.self_test.extra_hits} extra hit(s) in the random data.`:""}</p>
       <table><tr><th>Sample</th><th>Planted at</th><th>Length</th><th>Carved length</th><th>Result</th></tr>
-      ${(r.self_test.results||[]).map(t=>`<tr><td>${esc(t.sample)}</td><td class="mono">${hx(t.offset)}</td><td>${t.length.toLocaleString()}</td><td>${t.found?t.carved_length.toLocaleString():"not found"}</td><td>${t.ok?'<span class="pill ok">exact</span>':'<span class="pill no">wrong</span>'}</td></tr>`).join("")}</table>
+      ${(r.self_test.results||[]).map(t=>`<tr><td>${esc(t.sample)}</td><td class="mono">${hx(t.offset)}</td><td>${t.length.toLocaleString()}</td><td>${t.found?t.carved_length.toLocaleString():"not found"}</td><td>${t.ok?(r.self_test.estimated?'<span class="pill ok">found</span>':'<span class="pill ok">exact</span>'):'<span class="pill no">wrong</span>'}</td></tr>`).join("")}</table>
       <h2 style="margin-top:14px">Draft signature <span class="pill no">not validated</span></h2>
       <pre class="mono" style="font-size:11.5px;background:#f6f7f9;padding:8px;overflow:auto">${esc(JSON.stringify(r.signature,null,2))}</pre>
       <button class="btn amber" id="lEdit">Open in Editor</button>`:""}

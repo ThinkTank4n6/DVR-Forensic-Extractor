@@ -48,7 +48,7 @@ ol li,ul li{margin:3px 0}
 </style>
 </head>
 <body>
-<header><div class="logo">DFX</div><h1>DVR Forensic Extractor &mdash; User Manual</h1><div class="v">Version <span id="ver">2026.11.9</span></div></header>
+<header><div class="logo">DFX</div><h1>DVR Forensic Extractor &mdash; User Manual</h1><div class="v">Version <span id="ver">2026.11.10</span></div></header>
 <div class="wrap">
 <nav>
  <b>Getting started</b>
@@ -368,6 +368,15 @@ DFX has only been tested against synthetic test images, not drives or exports fr
 <tr><td>Channel (suggestion)</td><td>A small number that is constant inside each sample but differs between samples. Confirm it with samples from channels you know.</td></tr>
 </table>
 <p>On large samples, fields are checked on the first 2,000 frames of each sample (the findings say so). Every run is recorded in the case log.</p>
+<p><b>When you don't need a learned signature.</b> If the samples are standard MP4, AVI, MKV or ASF files (Dahua's <code>.asf</code> exports, for example), the learner says so in a green box and names the built-in signature that already recovers them with exact lengths. Use that one.</p>
+<p><b>Frames after a file header.</b> Some exports start with a file header and then the recorder's frames. The learner finds frame streams that start within the first 4 KB and describes the <b>frames</b> (what the DVR's drive holds), not the export's header.</p>
+<table>
+<tr><th>Learner message</th><th>What it means</th></tr>
+<tr><td>Only N sample(s)</td><td>A caution, not an error. With fewer than 3, a byte that matches by coincidence can end up in the header.</td></tr>
+<tr><td>No length field or footer found</td><td>Nothing in the samples tells where an item ends, so lengths can only be estimated. Check whether the green box names a built-in signature.</td></tr>
+<tr><td>Self-test: every sample was found at its start…</td><td>The estimated mode worked as well as it can; lengths aren't expected to match exactly.</td></tr>
+<tr><td>Self-test failed</td><td>The draft didn't find every sample. Don't use it; look at the self-test table and the findings.</td></tr>
+</table>
 
 <h2 id="results">Results tab</h2>
 <div class="ribbon">
@@ -445,6 +454,7 @@ DFX has only been tested against synthetic test images, not drives or exports fr
 <tr><td><b>header_length</b></td><td>Reads the size from a field in the header.</td><td>RIFF/AVI and similar formats.</td><td>A damaged header gives a wrong size; the min/max limits catch most of these.</td></tr>
 <tr><td><b>header_maxsize</b></td><td>Takes bytes up to the <b>next header of the same signature</b>, or max size, whichever comes first. The item is noted "end estimated".</td><td>A first look at formats you don't know yet; back-to-back exports.</td><td>The last item before other data includes unrelated trailing bytes. Short headers give false hits in random data.</td></tr>
 <tr><td><b>frame_chain</b></td><td>Reads each frame's length, jumps to the next frame and checks its header (and footer, if set), until the chain breaks.</td><td>DVR streams made of frames (Dahua DHAV).</td><td>A recording split by overwritten space comes out as several chains. Joining them by time comes in a later build.</td></tr>
+<tr><td><b>asf_walk</b></td><td>Walks ASF/WMV top-level objects (header, data, index). Stops at a second header, so back-to-back exports stay separate.</td><td>ASF/WMV, including Dahua <code>.asf</code> exports.</td><td>The note reports the header's file size (and whether it matches), creation date and duration. A newer ASF header inside a file's declared length means it was overwritten: cut there, labeled capped.</td></tr>
 <tr><td><b>box_walk</b></td><td>Walks MP4/MOV top-level boxes (<code>ftyp</code>, <code>moov</code>, <code>mdat</code>…).</td><td>MP4, MOV and 3GP.</td><td>Files without <code>moov</code> are flagged as incomplete and may not play.</td></tr>
 </table>
 <h3 id="judge">Length judge (mediacarve)</h3>
@@ -491,7 +501,7 @@ DFX has only been tested against synthetic test images, not drives or exports fr
 <tr><td>mp4-iso</td><td>MP4 / MOV / 3GP</td><td>box_walk + mediacarve</td><td>On</td><td>Length judged by mediacarve. Flags files with no <code>moov</code> box.</td></tr>
 <tr><td>avi-riff</td><td>AVI</td><td>header_length + mediacarve</td><td>On</td><td>Length judged by mediacarve. Files over 1 GB (OpenDML) recover their first 1 GB part only.</td></tr>
 <tr><td>mkv-ebml</td><td>Matroska / WebM</td><td>header_maxsize + mediacarve</td><td>On</td><td>Length parsed by mediacarve.</td></tr>
-<tr><td>asf-wmv</td><td>ASF / WMV</td><td>header_maxsize</td><td>On</td><td>Takes max size bytes.</td></tr>
+<tr><td>asf-wmv</td><td>ASF / WMV (incl. Dahua .asf exports)</td><td>asf_walk</td><td>On</td><td>Exact length from the ASF object walk; reports creation date and duration.</td></tr>
 <tr><td>flv</td><td>Flash Video</td><td>header_maxsize</td><td>On</td><td>Takes max size bytes.</td></tr>
 <tr><td>hik-imkh</td><td>Hikvision export (IMKH)</td><td>header_maxsize</td><td>On</td><td>Takes max size bytes. A Hikvision-aware method comes later.</td></tr>
 <tr><td>dahua-dhav</td><td>Dahua DHAV frames</td><td>frame_chain</td><td><b>Off</b></td><td>Channel offset unconfirmed. Validate before enabling.</td></tr>

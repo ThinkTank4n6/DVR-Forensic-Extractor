@@ -27,7 +27,8 @@ A signature is a JSON object. Fields:
   notes            free text (where it came from, what it was tested against)
 
 `box_walk` is a structural mode for ISO media (MP4/MOV/3GP): the item length
-comes from walking its top-level boxes.
+comes from walking its top-level boxes. `asf_walk` does the same for ASF/WMV
+(Dahua exports .asf): header + data + index objects.
 """
 from __future__ import annotations
 
@@ -36,7 +37,7 @@ import json
 import re
 from pathlib import Path
 
-MODES = ("header_footer", "header_length", "header_maxsize", "frame_chain", "box_walk")
+MODES = ("header_footer", "header_length", "header_maxsize", "frame_chain", "box_walk", "asf_walk")
 TS_FORMATS = ("unix", "dahua_packed", "filetime")
 
 BUILTIN_DIR = Path(__file__).resolve().parent / "signatures"
