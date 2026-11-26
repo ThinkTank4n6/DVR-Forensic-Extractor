@@ -1,0 +1,30 @@
+name: Windows Release Build
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyinstaller
+      - run: .\build_windows.bat
+        shell: cmd
+      - name: Package
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}"
+          New-Item -ItemType Directory pkg | Out-Null
+          Copy-Item dist\DFX.exe, README.md, LICENSE, VERSION pkg\
+          Compress-Archive pkg\* "DFX-$v-windows.zip"
+          (Get-FileHash "DFX-$v-windows.zip" -Algorithm SHA256).Hash.ToLower() + "  DFX-$v-windows.zip" | Out-File -Encoding ascii "DFX-$v-windows.zip.sha256"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            DFX-*-windows.zip
+            DFX-*-windows.zip.sha256

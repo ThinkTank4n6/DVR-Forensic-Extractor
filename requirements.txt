@@ -1,0 +1,4 @@
+# No required packages - DFX runs on the Python 3.11+ standard library.
+# Optional:
+#   libewf-python   E01 / Ex01 evidence support
+#   pytest          running the test suite

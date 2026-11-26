@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DVR Forensic Extractor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  --graphite:#1f2933; --graphite2:#2b3946; --graphite3:#3a4a59;
+  --amber:#e39a2d; --amber2:#f3b85a; --amberbg:#fff4e0;
+  --bg:#eef1f4; --panel:#ffffff; --line:#c9d0d8; --text:#1d232b; --muted:#5b6773;
+  --ok:#2e7d4f; --bad:#b3261e;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",Arial,sans-serif;font-size:13px;color:var(--text);background:var(--bg);height:100vh;display:flex;flex-direction:column}
+button,input,select,textarea{font-family:inherit;font-size:13px}
+/* title bar */
+.titlebar{background:var(--graphite);color:#fff;display:flex;align-items:center;padding:6px 14px;gap:10px}
+.logo{width:22px;height:22px;border-radius:4px;background:var(--amber);color:var(--graphite);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:11px}
+.titlebar .name{font-weight:600;letter-spacing:.3px}
+.titlebar .ver{color:#9fb0c0;font-size:12px}
+.titlebar .casebadge{margin-left:auto;color:#cfd9e2;font-size:12px}
+/* tabs */
+.tabs{background:var(--graphite2);display:flex;padding:0 8px}
+.tab{color:#cfd9e2;padding:7px 16px;cursor:pointer;border-top:3px solid transparent;user-select:none}
+.tab:hover{color:#fff}
+.tab.active{background:var(--panel);color:var(--graphite);border-top-color:var(--amber);font-weight:600}
+/* ribbon */
+.ribbon{background:var(--panel);border-bottom:1px solid var(--line);display:flex;min-height:92px;padding:4px 6px}
+.group{display:flex;flex-direction:column;border-right:1px solid var(--line);padding:0 8px}
+.group .btns{display:flex;gap:2px;flex:1;align-items:flex-start}
+.group .glabel{text-align:center;color:var(--muted);font-size:11px;padding-top:2px}
+.rbtn{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:3px;width:74px;padding:6px 2px;border:1px solid transparent;border-radius:4px;background:none;cursor:pointer;color:var(--text);font-size:12px;line-height:1.15}
+.rbtn:hover{background:var(--amberbg);border-color:var(--amber2)}
+.rbtn:disabled{opacity:.4;cursor:default;background:none;border-color:transparent}
+.rbtn svg{width:28px;height:28px;stroke:var(--graphite3);fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.rbtn.primary svg{stroke:var(--amber)}
+.rcol{display:flex;flex-direction:column;gap:4px;padding:4px 4px;font-size:12px}
+.rcol label{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.rcol input[type=number],.rcol input[type=text]{width:120px;padding:2px 4px;border:1px solid var(--line);border-radius:3px}
+/* body */
+.main{flex:1;display:flex;min-height:0}
+.side{width:280px;background:var(--panel);border-right:1px solid var(--line);padding:12px;overflow:auto}
+.side h3{margin:4px 0 6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.kv{display:grid;grid-template-columns:90px 1fr;gap:3px 8px;margin-bottom:14px;font-size:12px}
+.kv div:nth-child(odd){color:var(--muted)}
+.mono{font-family:Consolas,"Cascadia Mono",monospace;word-break:break-all}
+.content{flex:1;overflow:auto;padding:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px;margin-bottom:12px}
+.card h2{margin:0 0 10px;font-size:15px;color:var(--graphite)}
+table{border-collapse:collapse;width:100%}
+th,td{border-bottom:1px solid #e3e7eb;padding:5px 6px;text-align:left;vertical-align:top}
+th{background:#f5f7f9;font-weight:600;position:sticky;top:0}
+tr.sel td{background:var(--amberbg)}
+tr.click{cursor:pointer}
+.pill{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px}
+.pill.ok{background:#e3f3ea;color:var(--ok)}
+.pill.no{background:#fde8e6;color:var(--bad)}
+.pill.n{background:#eef1f4;color:var(--muted)}
+.form{display:grid;grid-template-columns:170px 1fr;gap:6px 10px;align-items:center}
+.form input,.form select,.form textarea{padding:4px 6px;border:1px solid var(--line);border-radius:3px;width:100%}
+.form .hint{grid-column:2;color:var(--muted);font-size:11px;margin-top:-3px}
+.sub{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.btn{padding:5px 12px;border:1px solid var(--graphite3);background:#fff;border-radius:4px;cursor:pointer}
+.btn.amber{background:var(--amber);border-color:var(--amber);color:var(--graphite);font-weight:600}
+.btn:hover{filter:brightness(.96)}
+.err{color:var(--bad);margin-top:6px;white-space:pre-wrap}
+.muted{color:var(--muted)}
+/* status bar */
+.status{background:var(--graphite);color:#dfe7ee;display:flex;align-items:center;gap:12px;padding:5px 12px;font-size:12px}
+.bar{flex:0 0 260px;height:10px;background:var(--graphite3);border-radius:5px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--amber);transition:width .3s}
+.logpane{height:130px;background:#151d25;color:#c5d1dc;font-family:Consolas,monospace;font-size:11.5px;overflow:auto;padding:6px 10px;white-space:pre-wrap}
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(15,22,30,.55);display:none;align-items:center;justify-content:center;z-index:9}
+.modal.show{display:flex}
+.dlg{background:#fff;border-radius:6px;width:640px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+.dlg header{background:var(--graphite);color:#fff;padding:8px 12px;border-radius:6px 6px 0 0;font-weight:600}
+.dlg .body{padding:12px;overflow:auto;flex:1}
+.dlg footer{padding:8px 12px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+.blist div{padding:4px 6px;cursor:pointer;border-radius:3px}
+.blist div:hover{background:var(--amberbg)}
+.blist .d::before{content:"\1F4C1  "}
+.blist .f::before{content:"\1F5CE  "}
+</style>
+</head>
+<body>
+<div class="titlebar">
+  <div class="logo">DFX</div><div class="name">DVR Forensic Extractor</div><div class="ver" id="ver"></div>
+  <div class="casebadge" id="casebadge">No case open</div>
+</div>
+<div class="tabs" id="tabs">
+  <div class="tab active" data-tab="home">Home</div>
+  <div class="tab" data-tab="carve">Carve</div>
+  <div class="tab" data-tab="sigs">Signatures</div>
+  <div class="tab" data-tab="results">Results</div>
+  <div class="tab" data-tab="help">Help</div>
+</div>
+<div class="ribbon" id="ribbon"></div>
+<div class="main">
+  <div class="side">
+    <h3>Case</h3><div class="kv" id="sideCase"></div>
+    <h3>Evidence</h3><div class="kv" id="sideEv"></div>
+    <h3>Job</h3><div class="kv" id="sideJob"></div>
+  </div>
+  <div class="content" id="content"></div>
+</div>
+<div class="logpane" id="log"></div>
+<div class="status"><span id="stText">Ready</span><div class="bar"><i id="stBar"></i></div><span id="stPct"></span><span style="margin-left:auto" class="muted">Evidence is opened read-only</span></div>
+
+<div class="modal" id="modal"><div class="dlg"><header id="mTitle"></header><div class="body" id="mBody"></div><footer id="mFoot"></footer></div></div>
+
+<script>
+const TOKEN="__DFX_TOKEN__";
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt=n=>{n=Number(n||0);const u=["B","KB","MB","GB","TB"];let i=0;while(n>=1024&&i<4){n/=1024;i++}return (i?n.toFixed(2):n)+" "+u[i]};
+async function api(path,body){
+  const o=body===undefined?{}:{method:"POST",headers:{"Content-Type":"application/json","X-DFX-Token":TOKEN},body:JSON.stringify(body)};
+  const r=await fetch(path,o);const j=await r.json();if(!r.ok)throw new Error(j.error||r.statusText);return j;
+}
+let S={},SIGS=[],TAB="home",SELRUN="",EDIT=null,lastLogLen=0;
+
+/* ---------------- icons ---------------- */
+const I={
+ case:'<svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>',
+ open:'<svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg>',
+ file:'<svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg>',
+ drive:'<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="16" cy="12" r="1.5"/><path d="M6 12h6"/></svg>',
+ hash:'<svg viewBox="0 0 24 24"><path d="M5 9h14M5 15h14M10 4L8 20M16 4l-2 16"/></svg>',
+ play:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 8l6 4-6 4z"/></svg>',
+ stop:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><rect x="9" y="9" width="6" height="6"/></svg>',
+ resume:'<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 3-6.2"/><path d="M4 4v4h4"/></svg>',
+ sig:'<svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7"/><path d="M17 15l2 2 3-4"/></svg>',
+ add:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>',
+ edit:'<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+ del:'<svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg>',
+ imp:'<svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>',
+ exp:'<svg viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M4 20h16"/></svg>',
+ test:'<svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6L5 19a1 1 0 0 0 1 2h12a1 1 0 0 0 1-2l-5-10V3"/></svg>',
+ report:'<svg viewBox="0 0 24 24"><path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>',
+ folder:'<svg viewBox="0 0 24 24"><path d="M3 6h6l2 2h10v11H3z"/><path d="M3 10h18"/></svg>',
+ refresh:'<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg>',
+ help:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg>',
+};
+const rb=(id,icon,label,primary)=>`<button class="rbtn ${primary?'primary':''}" id="${id}">${I[icon]}<span>${label}</span></button>`;
+const grp=(label,html)=>`<div class="group"><div class="btns">${html}</div><div class="glabel">${label}</div></div>`;
+
+/* ---------------- ribbon per tab ---------------- */
+function ribbon(){
+  const R=$("#ribbon");
+  if(TAB==="home") R.innerHTML=
+    grp("Case",rb("bNewCase","case","New / Open Case",1)+rb("bCaseFolder","folder","Case Folder"))+
+    grp("Evidence",rb("bImage","file","Image File")+rb("bDrive","drive","Physical Drive")+rb("bHash","hash","Hash Evidence"))+
+    grp("Next",rb("bGoCarve","play","Go to Carve",1));
+  if(TAB==="carve") R.innerHTML=
+    grp("Run",rb("bStart","play","Start Carve",1)+rb("bCancel","stop","Cancel")+rb("bResume","resume","Resume Run"))+
+    grp("Options",`<div class="rcol">
+       <label><input type="checkbox" id="oDry"> Dry run (log only)</label>
+       <label><input type="checkbox" id="oAlign"> Sector-aligned only</label>
+       <label>Max items <input type="number" id="oMax" value="0" min="0"></label></div>
+     <div class="rcol">
+       <label>Start offset <input type="text" id="oStart" value="0"></label>
+       <label>End offset <input type="text" id="oEnd" placeholder="end of evidence"></label>
+       <label>Chunk (MB) <input type="number" id="oChunk" value="64" min="1"></label></div>`);
+  if(TAB==="sigs") R.innerHTML=
+    grp("Library",rb("bSigNew","add","New",1)+rb("bSigEdit","edit","Edit / Copy")+rb("bSigDel","del","Delete"))+
+    grp("Exchange",rb("bSigImp","imp","Import JSON")+rb("bSigExp","exp","Export JSON"))+
+    grp("Check",rb("bSigTest","test","Test on File",1));
+  if(TAB==="results") R.innerHTML=
+    grp("Runs",rb("bRefresh","refresh","Refresh"))+
+    grp("Output",rb("bReport","report","Open Report",1)+rb("bRebuild","report","Rebuild Report")+rb("bOpenRun","folder","Open Run Folder"));
+  if(TAB==="help") R.innerHTML=grp("Help",rb("bAbout","help","About"));
+  wire();
+}
+
+/* ---------------- content per tab ---------------- */
+function content(){
+  const C=$("#content");
+  if(TAB==="home"){
+    C.innerHTML=`<div class="card"><h2>Workflow</h2>
+     <ol><li><b>New / Open Case</b> &mdash; choose a case folder and enter case details. Every action is written to <span class="mono">case_log.txt</span> with a UTC time.</li>
+     <li><b>Image File</b> (raw, dd, .001 split, E01 with libewf-python) or <b>Physical Drive</b> (run as Administrator, use a write blocker).</li>
+     <li><b>Hash Evidence</b> &mdash; MD5 and SHA-256 recorded in the report.</li>
+     <li><b>Carve</b> &mdash; pick signatures, set options, start. Long scans checkpoint and can be resumed.</li>
+     <li><b>Results</b> &mdash; open the HTML report and carved files.</li></ol>
+     <p class="muted">Evidence is only ever opened read-only. Carved items go to <span class="mono">&lt;case&gt;\\runs\\carve_&lt;date_time&gt;</span>.</p></div>`;
+  }
+  if(TAB==="carve"){
+    C.innerHTML=`<div class="card"><h2>Signatures for this scan</h2>
+     <table><tr><th></th><th>Name</th><th>Mode</th><th>Header</th><th>Validated</th><th>Source</th><th>Problems</th></tr>
+     ${SIGS.map(s=>`<tr><td><input type="checkbox" class="cs" value="${esc(s.id)}" ${s.enabled&&!(s.problems||[]).length?'checked':''} ${(s.problems||[]).length?'disabled':''}></td>
+       <td>${esc(s.name)}</td><td>${esc(s.mode)}</td><td class="mono">${esc(s.header)}</td>
+       <td>${s.validated?'<span class="pill ok">Yes</span>':'<span class="pill no">No</span>'}</td>
+       <td><span class="pill n">${esc(s.origin)}</span></td><td class="err">${esc((s.problems||[]).join("; "))}</td></tr>`).join("")}
+     </table><p class="muted">Unvalidated signatures are flagged in the report. Dahua DHAV is off by default until you validate it.</p></div>`;
+  }
+  if(TAB==="sigs"){
+    C.innerHTML=`<div class="card"><h2>Signature library</h2>
+     <table id="sigTable"><tr><th>Name</th><th>ID</th><th>Mode</th><th>Header</th><th>Footer</th><th>Max size</th><th>Validated</th><th>Source</th></tr>
+     ${SIGS.map(s=>`<tr class="click ${EDIT&&EDIT.id===s.id?'sel':''}" data-id="${esc(s.id)}"><td>${esc(s.name)}</td><td class="mono">${esc(s.id)}</td><td>${esc(s.mode)}</td>
+       <td class="mono">${esc(s.header)}</td><td class="mono">${esc(s.footer)}</td><td>${fmt(s.max_size)}</td>
+       <td>${s.validated?'<span class="pill ok">Yes</span>':'<span class="pill no">No</span>'}</td><td><span class="pill n">${esc(s.origin)}</span></td></tr>`).join("")}
+     </table></div><div id="sigEditor"></div>`;
+    C.querySelectorAll("#sigTable tr[data-id]").forEach(tr=>tr.onclick=()=>{EDIT=SIGS.find(s=>s.id===tr.dataset.id);content();});
+    if(EDIT&&EDIT._editing) editor();
+    else if(EDIT) $("#sigEditor").innerHTML=`<div class="card"><h2>${esc(EDIT.name)}</h2><pre class="mono" style="font-size:11.5px">${esc(JSON.stringify(strip(EDIT),null,2))}</pre></div>`;
+  }
+  if(TAB==="results") loadRuns();
+  if(TAB==="help"){
+    C.innerHTML=`<div class="card"><h2>Carving modes</h2><table>
+     <tr><th>header_footer</th><td>From the header to the first (or last) footer within max size.</td></tr>
+     <tr><th>header_length</th><td>Item size read from a field in the header (offset, size, byte order, adjust, multiplier).</td></tr>
+     <tr><th>header_maxsize</th><td>Fixed amount from the header. Use for a first look at unknown formats.</td></tr>
+     <tr><th>frame_chain</th><td>Follows frame after frame using each frame's length field until the chain breaks. Records frame count, channels and first/last device time.</td></tr>
+     <tr><th>box_walk</th><td>ISO media (MP4/MOV): walks top-level boxes to find the true end.</td></tr></table></div>
+     <div class="card"><h2>Hex patterns</h2><p>Bytes in hex separated by spaces, <span class="mono">??</span> matches any byte: <span class="mono">52 49 46 46 ?? ?? ?? ?? 41 56 49 20</span>. Footers cannot use wildcards.</p></div>
+     <div class="card"><h2>Validation</h2><p>Mark a signature <b>Validated</b> only after it found every planted item, byte-for-byte, in a test image with known contents (for example through the Forensic Tool Validator). The report lists every signature definition used and its validation state.</p></div>`;
+  }
+}
+const strip=s=>{const o={...s};delete o.origin;delete o.problems;delete o._editing;return o};
+
+/* ---------------- signature editor ---------------- */
+function editor(){
+  const s=EDIT, lf=s.length_field||{}, cf=s.channel_field||{}, tf=s.timestamp_field||{};
+  const f=(id,label,val,hint,type="text")=>`<label for="${id}">${label}</label><input id="${id}" type="${type}" value="${esc(val??"")}">${hint?`<div class="hint">${hint}</div>`:""}`;
+  $("#sigEditor").innerHTML=`<div class="card"><h2>${s.origin==="built-in"?"Copy of built-in signature (saved as a user signature)":"Edit signature"}</h2>
+   <div class="form">
+    ${f("eId","ID",s.id,"Letters, digits, - and _. Same ID as a built-in replaces it.")}
+    ${f("eName","Name",s.name)}
+    ${f("eExt","Extension",s.extension)}
+    <label>Mode</label><select id="eMode">${["header_footer","header_length","header_maxsize","frame_chain","box_walk"].map(m=>`<option ${m===s.mode?"selected":""}>${m}</option>`).join("")}</select>
+    ${f("eHeader","Header (hex)",s.header,"?? = any byte")}
+    ${f("eHOff","Header offset",s.header_offset,"Where the header sits inside the item (MP4 ftyp = 4)","number")}
+    <div class="m-foot" style="display:contents">
+     ${f("eFooter","Footer (hex)",s.footer)}
+     ${f("eTail","Bytes after footer",s.footer_tail,"Kept after the footer, e.g. a trailing length field","number")}
+     <label>Footer search</label><select id="eFS"><option ${s.footer_search==="first"?"selected":""}>first</option><option ${s.footer_search==="last"?"selected":""}>last</option></select>
+     <label>If footer missing</label><select id="eMiss"><option ${s.on_missing_footer==="skip"?"selected":""}>skip</option><option ${s.on_missing_footer==="maxsize"?"selected":""}>maxsize</option></select>
+    </div>
+    <div class="m-len" style="display:contents"><label>Length field</label><div class="sub">
+      <input id="lOff" type="number" placeholder="offset" value="${esc(lf.offset??"")}" title="offset">
+      <select id="lSize">${[1,2,4,8].map(n=>`<option ${Number(lf.size||4)===n?"selected":""}>${n}</option>`).join("")}</select>
+      <select id="lEnd"><option ${lf.endian!=="big"?"selected":""}>little</option><option ${lf.endian==="big"?"selected":""}>big</option></select>
+      <input id="lAdj" type="number" placeholder="adjust" value="${esc(lf.adjust??0)}" title="adjust">
+      <input id="lMul" type="number" placeholder="multiplier" value="${esc(lf.multiplier??1)}" title="multiplier"></div>
+      <div class="hint">offset &middot; size &middot; byte order &middot; adjust &middot; multiplier. Length = value &times; multiplier + adjust, measured from the item start.</div></div>
+    <div class="m-chain" style="display:contents">
+     ${f("eGap","Max gap between frames",s.chain_max_gap,"0 = frames must be back-to-back","number")}
+     <label>Channel field</label><div class="sub"><input id="cOff" type="number" placeholder="offset" value="${esc(cf.offset??"")}"><select id="cSize">${[1,2,4].map(n=>`<option ${Number(cf.size||1)===n?"selected":""}>${n}</option>`).join("")}</select></div>
+     <label>Timestamp field</label><div class="sub"><input id="tOff" type="number" placeholder="offset" value="${esc(tf.offset??"")}">
+       <select id="tSize">${[4,8].map(n=>`<option ${Number(tf.size||4)===n?"selected":""}>${n}</option>`).join("")}</select>
+       <select id="tEnd"><option ${tf.endian!=="big"?"selected":""}>little</option><option ${tf.endian==="big"?"selected":""}>big</option></select>
+       <select id="tFmt">${["unix","dahua_packed","filetime"].map(n=>`<option ${tf.format===n?"selected":""}>${n}</option>`).join("")}</select></div>
+     <div class="hint">Leave offsets blank to skip.</div></div>
+    ${f("eMin","Min size (bytes)",s.min_size,"","number")}
+    ${f("eMax","Max size (bytes)",s.max_size,"","number")}
+    <label>Sector-aligned</label><div><input type="checkbox" id="eAl" ${s.sector_aligned?"checked":""} style="width:auto"> only accept items starting on a sector boundary</div>
+    <label>Enabled by default</label><div><input type="checkbox" id="eEn" ${s.enabled?"checked":""} style="width:auto"></div>
+    <label>Validated</label><div><input type="checkbox" id="eVal" ${s.validated?"checked":""} style="width:auto"> passed my validation tests with this version</div>
+    <label>Notes</label><textarea id="eNotes" rows="3">${esc(s.notes)}</textarea>
+   </div>
+   <div style="margin-top:12px;display:flex;gap:8px"><button class="btn amber" id="eSave">Save</button><button class="btn" id="eTest">Test on File&hellip;</button><button class="btn" id="eCancel">Close</button></div>
+   <div class="err" id="eErr"></div><div id="eTestOut"></div></div>`;
+  const vis=()=>{const m=$("#eMode").value;
+    document.querySelector(".m-foot").style.display=(m==="header_footer"||m==="frame_chain")?"contents":"none";
+    document.querySelector(".m-len").style.display=(m==="header_length"||m==="frame_chain")?"contents":"none";
+    document.querySelector(".m-chain").style.display=m==="frame_chain"?"contents":"none";};
+  $("#eMode").onchange=vis;vis();
+  $("#eSave").onclick=async()=>{try{const s2=await api("/api/signatures",readEditor());await loadSigs();EDIT={...SIGS.find(x=>x.id===s2.id)};content();}catch(e){$("#eErr").textContent=e.message}};
+  $("#eCancel").onclick=()=>{EDIT=null;content()};
+  $("#eTest").onclick=()=>pickFile("Test signature on a sample file",p=>runTest(readEditor(),p));
+}
+function readEditor(){
+  const num=id=>{const v=$(id).value.trim();return v===""?null:Number(v)};
+  const m=$("#eMode").value;
+  const s={id:$("#eId").value.trim(),name:$("#eName").value.trim(),extension:$("#eExt").value.trim(),mode:m,
+    header:$("#eHeader").value.trim(),header_offset:num("#eHOff")||0,footer:"",footer_tail:0,footer_search:"first",on_missing_footer:"skip",
+    length_field:null,chain_max_gap:0,channel_field:null,timestamp_field:null,
+    min_size:num("#eMin")??16,max_size:num("#eMax")??2147483648,sector_aligned:$("#eAl").checked,
+    enabled:$("#eEn").checked,validated:$("#eVal").checked,notes:$("#eNotes").value};
+  if(m==="header_footer"||m==="frame_chain"){s.footer=$("#eFooter").value.trim();s.footer_tail=num("#eTail")||0;s.footer_search=$("#eFS").value;s.on_missing_footer=$("#eMiss").value}
+  if(m==="header_length"||m==="frame_chain")s.length_field={offset:num("#lOff"),size:Number($("#lSize").value),endian:$("#lEnd").value,adjust:num("#lAdj")||0,multiplier:num("#lMul")||1};
+  if(m==="frame_chain"){s.chain_max_gap=num("#eGap")||0;
+    if(num("#cOff")!==null)s.channel_field={offset:num("#cOff"),size:Number($("#cSize").value)};
+    if(num("#tOff")!==null)s.timestamp_field={offset:num("#tOff"),size:Number($("#tSize").value),endian:$("#tEnd").value,format:$("#tFmt").value};}
+  return s;
+}
+async function runTest(sig,path){
+  const out=$("#eTestOut")||$("#content");
+  out.innerHTML=`<p class="muted">Testing on ${esc(path)}&hellip;</p>`;
+  try{const r=await api("/api/signatures/test",{signature:sig,path,limit:100});
+    out.innerHTML=`<h3>Test result: ${r.items.length} item(s), ${r.rejected} rejected hit(s), ${fmt(r.scanned)} scanned</h3>
+     <table><tr><th>#</th><th>Offset</th><th>Length</th><th>Status</th><th>Frames</th><th>Ch</th><th>First</th><th>Last</th><th>Notes</th></tr>
+     ${r.items.map(i=>`<tr><td>${i.item_no}</td><td class="mono">${i.start_hex}</td><td>${Number(i.length).toLocaleString()}</td><td>${esc(i.status)}</td><td>${i.frames||""}</td><td>${esc(i.channels)}</td><td>${esc(i.first_time)}</td><td>${esc(i.last_time)}</td><td>${esc(i.notes)}</td></tr>`).join("")}</table>`;
+  }catch(e){out.innerHTML=`<div class="err">${esc(e.message)}</div>`}
+}
+
+/* ---------------- results ---------------- */
+async function loadRuns(){
+  const C=$("#content");
+  if(!S.case||!S.case.folder){C.innerHTML=`<div class="card">Open a case first.</div>`;return}
+  const runs=await api("/api/runs");
+  if(!SELRUN&&runs.length)SELRUN=runs[0].name;
+  let items=SELRUN?await api("/api/run?name="+encodeURIComponent(SELRUN)):[];
+  C.innerHTML=`<div class="card"><h2>Runs</h2><table><tr><th>Run</th><th>Items</th><th>Finished</th><th>State</th></tr>
+   ${runs.map(r=>`<tr class="click ${r.name===SELRUN?'sel':''}" data-run="${esc(r.name)}"><td class="mono">${esc(r.name)}</td><td>${r.items??""}</td><td>${esc(r.finished||"")}</td>
+     <td>${!r.complete?'<span class="pill n">running / interrupted</span>':r.canceled?'<span class="pill no">canceled - resumable</span>':r.dry_run?'<span class="pill n">dry run</span>':'<span class="pill ok">complete</span>'}</td></tr>`).join("")||"<tr><td colspan=4>No runs yet</td></tr>"}</table></div>
+   <div class="card"><h2>Items ${SELRUN?"&mdash; "+esc(SELRUN):""}</h2><table><tr><th>#</th><th>Signature</th><th>Offset</th><th>Length</th><th>Status</th><th>Frames</th><th>Ch</th><th>First (device)</th><th>Last (device)</th><th>File</th><th>Notes</th></tr>
+   ${items.map(i=>`<tr><td>${i.item_no}</td><td>${esc(i.signature_name)}</td><td class="mono">${esc(i.start_hex)}</td><td>${Number(i.length).toLocaleString()}</td><td>${esc(i.status)}</td>
+     <td>${i.frames!=="0"?esc(i.frames):""}</td><td>${esc(i.channels)}</td><td>${esc(i.first_time)}</td><td>${esc(i.last_time)}</td><td class="mono" style="font-size:11px">${esc(i.file)}</td><td>${esc(i.notes)}</td></tr>`).join("")||"<tr><td colspan=11>No items</td></tr>"}</table></div>`;
+  C.querySelectorAll("tr[data-run]").forEach(tr=>tr.onclick=()=>{SELRUN=tr.dataset.run;loadRuns()});
+}
+
+/* ---------------- dialogs ---------------- */
+function modal(title,body,buttons){
+  $("#mTitle").textContent=title;$("#mBody").innerHTML=body;$("#mFoot").innerHTML="";
+  buttons.forEach(([label,fn,cls])=>{const b=document.createElement("button");b.className="btn "+(cls||"");b.textContent=label;b.onclick=fn;$("#mFoot").appendChild(b)});
+  $("#modal").classList.add("show");
+}
+const closeModal=()=>$("#modal").classList.remove("show");
+function browser(title,wantFile,cb,start){
+  let cur=start||"";
+  const draw=async()=>{
+    const r=await api("/api/browse?path="+encodeURIComponent(cur));cur=r.path;
+    $("#mBody").innerHTML=`<div class="mono" style="margin-bottom:6px">${esc(r.path||"Computer")}</div>
+     <input id="bPath" style="width:100%;padding:4px;margin-bottom:6px" placeholder="or type a full path" value="${esc(r.path)}">
+     <div class="blist">${r.parent!==undefined&&r.path?`<div class="d" data-up="1">..</div>`:""}
+     ${r.dirs.map(d=>`<div class="d" data-d="${esc(d)}">${esc(d)}</div>`).join("")}
+     ${wantFile?r.files.map(f=>`<div class="f" data-f="${esc(f.name)}">${esc(f.name)} <span class="muted">${fmt(f.size)}</span></div>`).join(""):""}</div>
+     ${r.error?`<div class="err">${esc(r.error)}</div>`:""}`;
+    const join=(a,b)=>a?(a.endsWith("\\")||a.endsWith("/")?a+b:a+(a.includes("\\")?"\\":"/")+b):b;
+    $("#mBody").querySelectorAll("[data-up]").forEach(e=>e.onclick=()=>{cur=r.parent;draw()});
+    $("#mBody").querySelectorAll("[data-d]").forEach(e=>e.onclick=()=>{cur=join(r.path,e.dataset.d);draw()});
+    $("#mBody").querySelectorAll("[data-f]").forEach(e=>e.onclick=()=>{$("#bPath").value=join(r.path,e.dataset.f)});
+    $("#bPath").onkeydown=ev=>{if(ev.key==="Enter"){cur=$("#bPath").value;draw()}};
+  };
+  modal(title,"",[["Cancel",closeModal],["Select",()=>{const v=$("#bPath").value.trim();if(v){closeModal();cb(v)}},"amber"]]);
+  draw();
+}
+const pickFile=(t,cb)=>browser(t,true,cb);
+
+function caseDialog(){
+  const c=S.case||{};
+  modal("New / Open Case",`<div class="form">
+    <label>Case folder</label><div style="display:flex;gap:6px"><input id="cFolder" value="${esc(c.folder||"")}"><button class="btn" id="cBrowse">Browse</button></div>
+    <div class="hint">An existing folder with case.json is reopened; anything else becomes a new case.</div>
+    <label>Case number</label><input id="cNum" value="${esc(c.case_number||"")}">
+    <label>Examiner</label><input id="cEx" value="${esc(c.examiner||"")}">
+    <label>Agency</label><input id="cAg" value="${esc(c.agency||"")}">
+    <label>Description</label><textarea id="cDesc" rows="3">${esc(c.description||"")}</textarea></div><div class="err" id="cErr"></div>`,
+   [["Cancel",closeModal],["Open Case",async()=>{try{await api("/api/case",{folder:$("#cFolder").value,case_number:$("#cNum").value,examiner:$("#cEx").value,agency:$("#cAg").value,description:$("#cDesc").value});closeModal();refresh()}catch(e){$("#cErr").textContent=e.message}},"amber"]]);
+  $("#cBrowse").onclick=()=>{const keep={n:$("#cNum").value,e:$("#cEx").value,a:$("#cAg").value,d:$("#cDesc").value};
+    browser("Choose case folder",false,p=>{caseDialog();$("#cFolder").value=p;$("#cNum").value=keep.n;$("#cEx").value=keep.e;$("#cAg").value=keep.a;$("#cDesc").value=keep.d})};
+}
+async function driveDialog(){
+  modal("Physical Drive","<p class='muted'>Looking for drives&hellip;</p>",[["Cancel",closeModal]]);
+  const d=await api("/api/drives");
+  $("#mBody").innerHTML=d.length?`<p>Use a hardware write blocker. DFX opens the drive read-only.</p><table><tr><th>Drive</th><th>Size</th><th>Sector</th></tr>
+   ${d.map(x=>`<tr class="click" data-p="${esc(x.path)}"><td class="mono">${esc(x.path)}</td><td>${fmt(x.size)}</td><td>${x.sector_size}</td></tr>`).join("")}</table>`
+   :`<p>No drives could be opened. On Windows, start DFX <b>as Administrator</b> to read physical drives.</p>`;
+  $("#mBody").querySelectorAll("tr[data-p]").forEach(tr=>tr.onclick=()=>{closeModal();setSource(tr.dataset.p)});
+}
+async function setSource(p){try{await api("/api/source",{path:p});refresh()}catch(e){alert(e.message)}}
+
+/* ---------------- wiring ---------------- */
+function on(id,fn){const e=document.getElementById(id);if(e)e.onclick=fn}
+function wire(){
+  on("bNewCase",caseDialog);
+  on("bCaseFolder",()=>api("/api/open",{}).catch(e=>alert(e.message)));
+  on("bImage",()=>pickFile("Choose evidence image",setSource));
+  on("bDrive",driveDialog);
+  on("bHash",()=>api("/api/hash",{}).catch(e=>alert(e.message)));
+  on("bGoCarve",()=>setTab("carve"));
+  const carveBody=()=>({signature_ids:[...document.querySelectorAll(".cs:checked")].map(x=>x.value),
+    dry_run:$("#oDry").checked,aligned:$("#oAlign").checked,max_items:Number($("#oMax").value||0),
+    start:parseOff($("#oStart").value),end:parseOff($("#oEnd").value),chunk_mb:Number($("#oChunk").value||64)});
+  on("bStart",async()=>{try{const r=await api("/api/carve",carveBody());SELRUN=r.run}catch(e){alert(e.message)}});
+  on("bCancel",()=>api("/api/cancel",{}));
+  on("bResume",async()=>{
+    const runs=(await api("/api/runs")).filter(r=>!r.complete||r.canceled);
+    if(!runs.length)return alert("No canceled or interrupted runs to resume.");
+    modal("Resume a run",`<p>Resume uses the same signatures and options; the scan continues from its last checkpoint.</p>`+
+      runs.map(r=>`<div class="blist"><div data-r="${esc(r.name)}" class="d">${esc(r.name)}</div></div>`).join(""),[["Cancel",closeModal]]);
+    $("#mBody").querySelectorAll("[data-r]").forEach(e=>e.onclick=async()=>{closeModal();
+      try{const b=carveBody();b.resume_run=e.dataset.r;await api("/api/carve",b)}catch(x){alert(x.message)}});
+  });
+  on("bSigNew",()=>{EDIT={id:"",name:"",extension:"bin",mode:"header_footer",header:"",header_offset:0,footer:"",footer_tail:0,footer_search:"first",on_missing_footer:"skip",min_size:16,max_size:104857600,enabled:true,validated:false,notes:"",origin:"user",_editing:1};content()});
+  on("bSigEdit",()=>{if(!EDIT)return alert("Select a signature first.");EDIT={...EDIT,_editing:1};if(EDIT.origin==="built-in"){EDIT.validated=false}content()});
+  on("bSigDel",async()=>{if(!EDIT)return alert("Select a signature first.");if(EDIT.origin!=="user")return alert("Built-in signatures can't be deleted. Copy one to make your own version.");
+    if(!confirm(`Delete user signature ${EDIT.id}?`))return;await api("/api/signatures/delete",{id:EDIT.id});EDIT=null;await loadSigs();content()});
+  on("bSigExp",()=>{const data=JSON.stringify((EDIT?[EDIT]:SIGS).map(strip),null,2);
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([data],{type:"application/json"}));a.download=EDIT?EDIT.id+".json":"dfx_signatures.json";a.click()});
+  on("bSigImp",()=>{const i=document.createElement("input");i.type="file";i.accept=".json";i.onchange=async()=>{
+    try{let d=JSON.parse(await i.files[0].text());if(!Array.isArray(d))d=[d];let n=0,errs=[];
+      for(const s of d){try{s.validated=false;await api("/api/signatures",s);n++}catch(e){errs.push((s.id||"?")+": "+e.message)}}
+      await loadSigs();content();alert(`Imported ${n} signature(s) as unvalidated.`+(errs.length?"\n\nProblems:\n"+errs.join("\n"):""))}catch(e){alert(e.message)}};i.click()});
+  on("bSigTest",()=>{if(!EDIT)return alert("Select a signature first.");if(!EDIT._editing){EDIT={...EDIT,_editing:1};content()}pickFile("Test signature on a sample file",p=>runTest(readEditor(),p))});
+  on("bRefresh",loadRuns);
+  on("bReport",()=>{if(!SELRUN)return alert("Select a run.");window.open("/runs/"+encodeURIComponent(SELRUN)+"/report.html","_blank")});
+  on("bRebuild",async()=>{if(!SELRUN)return alert("Select a run.");try{await api("/api/report",{run:SELRUN});window.open("/runs/"+encodeURIComponent(SELRUN)+"/report.html","_blank")}catch(e){alert(e.message)}});
+  on("bOpenRun",()=>{if(!SELRUN)return alert("Select a run.");api("/api/open",{run:SELRUN}).catch(e=>alert(e.message))});
+  on("bAbout",()=>modal("About",`<p><b>DVR Forensic Extractor</b> ${esc(S.version)}</p><p>Copyright (c) 2026 Christopher A. Tankelewicz (ThinkTank4n6). MIT License.</p><p class="muted">Provided without warranty. Validate every signature and every release against known test data before relying on results.</p>`,[["Close",closeModal,"amber"]]));
+}
+function parseOff(v){v=(v||"").trim();if(!v)return 0;return v.toLowerCase().startsWith("0x")?parseInt(v,16):Number(v.replace(/,/g,""))}
+function setTab(t){TAB=t;document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===t));ribbon();content()}
+document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>setTab(t.dataset.tab));
+
+/* ---------------- state polling ---------------- */
+function side(){
+  const c=S.case||{},e=S.source||{},h=S.evidence_hash||{},j=S.job||{};
+  $("#ver").textContent=S.version||"";
+  $("#casebadge").textContent=c.case_number?`Case ${c.case_number}${c.examiner?" · "+c.examiner:""}`:(c.folder?"Case open":"No case open");
+  $("#sideCase").innerHTML=c.folder?`<div>Number</div><div>${esc(c.case_number||"")}</div><div>Examiner</div><div>${esc(c.examiner||"")}</div><div>Folder</div><div class="mono">${esc(c.folder)}</div>`:`<div>&mdash;</div><div class="muted">New / Open Case</div>`;
+  $("#sideEv").innerHTML=e.path?`<div>Source</div><div class="mono">${esc(e.path)}</div><div>Type</div><div>${esc(e.kind)}</div><div>Size</div><div>${fmt(e.size)}</div>
+    <div>MD5</div><div class="mono">${esc(h.md5||"not hashed")}</div><div>SHA-256</div><div class="mono">${esc(h.sha256||"")}</div>`:`<div>&mdash;</div><div class="muted">Image File or Physical Drive</div>`;
+  const p=j.progress||{};const pct=p.total?Math.min(100,100*p.done/p.total):0;
+  $("#sideJob").innerHTML=j.type?`<div>Job</div><div>${esc(j.type)}${j.running?" (running)":""}</div>${p.items!==undefined?`<div>Items</div><div>${p.items}</div>`:""}
+    ${j.error?`<div>Error</div><div class="err">${esc(j.error)}</div>`:""}`:`<div>&mdash;</div><div class="muted">idle</div>`;
+  $("#stBar").style.width=(j.running?pct:0)+"%";
+  $("#stPct").textContent=j.running?`${pct.toFixed(1)}%  ${fmt(p.done)} / ${fmt(p.total)}${p.elapsed&&p.done?"  ·  "+eta(p):""}`:"";
+  $("#stText").textContent=j.running?`${j.type==="carve"?"Carving":"Hashing"}…`:(j.error?"Last job failed":"Ready");
+  const log=j.log||[];if(log.length!==lastLogLen){$("#log").textContent=log.join("\n");$("#log").scrollTop=1e9;lastLogLen=log.length}
+}
+function eta(p){const rate=p.done/p.elapsed;const s=(p.total-p.done)/rate;if(!isFinite(s))return"";const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return `${(rate/1048576).toFixed(0)} MB/s, ${h}h ${m}m left`}
+let wasRunning=false;
+async function refresh(){try{S=await api("/api/state");side();if(wasRunning&&!S.job.running&&TAB==="results")loadRuns();wasRunning=S.job.running}catch(e){$("#stText").textContent="Server not responding"}}
+async function loadSigs(){SIGS=await api("/api/signatures")}
+(async()=>{await loadSigs();await refresh();setTab("home");setInterval(refresh,1000)})();
+</script>
+</body>
+</html>
