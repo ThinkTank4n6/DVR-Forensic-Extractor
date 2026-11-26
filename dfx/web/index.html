@@ -92,7 +92,26 @@ tr.click{cursor:pointer}
 .status{background:var(--graphite);color:#dfe7ee;display:flex;align-items:center;gap:12px;padding:5px 12px;font-size:12px}
 .bar{flex:0 0 260px;height:10px;background:var(--graphite3);border-radius:5px;overflow:hidden}
 .bar i{display:block;height:100%;width:0;background:var(--amber);transition:width .3s}
-.logpane{height:130px;background:#151d25;color:#c5d1dc;font-family:Consolas,monospace;font-size:11.5px;overflow:auto;padding:6px 10px;white-space:pre-wrap}
+.logwrap{display:none;flex-direction:column;background:#151d25}
+.logwrap.open{display:flex}
+.loggrip{height:6px;cursor:ns-resize;background:var(--graphite3)}
+.loggrip:hover{background:var(--amber)}
+.logpane{height:150px;color:#c5d1dc;font-family:Consolas,monospace;font-size:11.5px;overflow:auto;padding:6px 10px;white-space:pre-wrap}
+.status .lastlog{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9fb0c0;font-family:Consolas,monospace;font-size:11.5px}
+.logbtn{background:var(--graphite3);color:#fff;border:0;border-radius:3px;padding:2px 9px;cursor:pointer;font-size:12px;white-space:nowrap}
+.logbtn:hover{background:var(--amber);color:var(--graphite)}
+@media (max-height:640px){
+  .titlebar{padding:3px 12px}
+  .tab{padding:4px 14px}
+  .ribbon{min-height:0;padding:2px 4px}
+  .rbtn{width:auto;flex-direction:row;gap:5px;padding:4px 8px;font-size:12px;white-space:nowrap}
+  .rbtn svg{width:18px;height:18px}
+  .rbtn span br{display:none}
+  .group .glabel{display:none}
+  .group .btns{flex-wrap:wrap;align-items:center}
+  .rcol{gap:2px;padding:2px}
+  .content{padding:8px}
+}
 /* modal */
 .modal{position:fixed;inset:0;background:rgba(15,22,30,.55);display:none;align-items:center;justify-content:center;z-index:9}
 .modal.show{display:flex}
@@ -128,8 +147,8 @@ tr.click{cursor:pointer}
   </div>
   <div class="content" id="content"></div>
 </div>
-<div class="logpane" id="log"></div>
-<div class="status"><span id="stText">Ready</span><div class="bar"><i id="stBar"></i></div><span id="stPct"></span><span style="margin-left:auto" class="muted">Evidence is opened read-only</span></div>
+<div class="logwrap" id="logwrap"><div class="loggrip" id="loggrip" title="Drag to resize"></div><div class="logpane" id="log"></div></div>
+<div class="status"><span id="stText">Ready</span><div class="bar"><i id="stBar"></i></div><span id="stPct"></span><span class="lastlog" id="lastlog"></span><span class="muted">Evidence is opened read-only</span><button class="logbtn" id="logbtn" title="Show or hide the case log">Log &#9650;</button></div>
 
 <div class="modal" id="modal"><div class="dlg"><header id="mTitle"></header><div class="body" id="mBody"></div><footer id="mFoot"></footer></div></div>
 
@@ -215,7 +234,7 @@ function content(){
   if(TAB==="home"){
     C.innerHTML=`<div class="card" style="border-left:4px solid var(--amber);background:var(--amberbg)"><b>Early development build &mdash; not yet tested on real DVR evidence.</b> Do not use for casework until the signatures have been validated.</div><div class="card"><h2>Workflow</h2>
      <ol><li><b>New / Open Case</b> &mdash; choose a case folder and enter case details. Every action is written to <span class="mono">case_log.txt</span> with a UTC time.</li>
-     <li><b>Image File</b> (raw, dd, .001 split, E01 with libewf-python) or <b>Physical Drive</b> (run as Administrator, use a write blocker).</li>
+     <li><b>Image File</b> (raw, dd, .001 split, E01/Ex01, AFF, VHD/VHDX, VMDK &mdash; built in) or <b>Physical Drive</b> (run as Administrator, use a write blocker).</li>
      <li><b>Hash Evidence</b> &mdash; MD5 and SHA-256 recorded in the report.</li>
      <li><b>Carve</b> &mdash; pick signatures, set options, start. Long scans checkpoint and can be resumed.</li>
      <li><b>Results</b> &mdash; open the HTML report and carved files.</li></ol>
@@ -648,9 +667,23 @@ function side(){
   $("#stBar").style.width=(j.running?pct:0)+"%";
   $("#stPct").textContent=j.running?`${pct.toFixed(1)}%  ${fmt(p.done)} / ${fmt(p.total)}${p.elapsed&&p.done?"  ·  "+eta(p):""}`:"";
   $("#stText").textContent=j.running?`${j.type==="carve"?"Carving":"Hashing"}…`:(j.error?"Last job failed":"Ready");
-  const log=j.log||[];if(log.length!==lastLogLen){$("#log").textContent=log.join("\n");$("#log").scrollTop=1e9;lastLogLen=log.length}
+  const log=j.log||[];if(log.length!==lastLogLen){$("#log").textContent=log.join("\n");$("#log").scrollTop=1e9;lastLogLen=log.length;
+    $("#lastlog").textContent=log.length?log[log.length-1]:""}
 }
 function eta(p){const rate=p.done/p.elapsed;const s=(p.total-p.done)/rate;if(!isFinite(s))return"";const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return `${(rate/1048576).toFixed(0)} MB/s, ${h}h ${m}m left`}
+/* ---------------- case log panel: collapsed by default, resizable, remembered ---------------- */
+const store={get(k,d){try{const v=localStorage.getItem("dfx."+k);return v===null?d:JSON.parse(v)}catch(e){return d}},
+             set(k,v){try{localStorage.setItem("dfx."+k,JSON.stringify(v))}catch(e){}}};
+function setLog(open){$("#logwrap").classList.toggle("open",open);$("#logbtn").innerHTML=open?"Log &#9660;":"Log &#9650;";
+  $("#lastlog").style.display=open?"none":"";store.set("logOpen",open);if(open)$("#log").scrollTop=1e9}
+$("#logbtn").onclick=()=>setLog(!$("#logwrap").classList.contains("open"));
+$("#lastlog").onclick=()=>setLog(true);$("#lastlog").style.cursor="pointer";$("#lastlog").title="Click to open the case log";
+$("#log").style.height=store.get("logHeight",150)+"px";
+setLog(store.get("logOpen",false));
+$("#loggrip").onmousedown=e=>{e.preventDefault();const y0=e.clientY,h0=$("#log").offsetHeight;
+  const mv=ev=>{const h=Math.max(60,Math.min(window.innerHeight*0.6,h0+(y0-ev.clientY)));$("#log").style.height=h+"px"};
+  const up=()=>{document.removeEventListener("mousemove",mv);document.removeEventListener("mouseup",up);store.set("logHeight",$("#log").offsetHeight)};
+  document.addEventListener("mousemove",mv);document.addEventListener("mouseup",up)};
 let wasRunning=false;
 async function refresh(){try{S=await api("/api/state");side();if(wasRunning&&!S.job.running&&TAB==="results")loadRuns();wasRunning=S.job.running}catch(e){$("#stText").textContent="Server not responding"}}
 async function loadSigs(){SIGS=await api("/api/signatures")}

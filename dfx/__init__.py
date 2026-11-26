@@ -13,7 +13,7 @@ _vf = Path(__file__).resolve().parent.parent / "VERSION"
 try:
     __version__ = _vf.read_text(encoding="utf-8").strip()
 except OSError:  # frozen build without VERSION next to it
-    __version__ = "2026.11.7"
+    __version__ = "2026.11.8"
 
 APP_NAME = "DVR Forensic Extractor"
 APP_SHORT = "DFX"

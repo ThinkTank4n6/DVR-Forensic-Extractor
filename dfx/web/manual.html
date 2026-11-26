@@ -48,7 +48,7 @@ ol li,ul li{margin:3px 0}
 </style>
 </head>
 <body>
-<header><div class="logo">DFX</div><h1>DVR Forensic Extractor &mdash; User Manual</h1><div class="v">Version <span id="ver">2026.11.7</span></div></header>
+<header><div class="logo">DFX</div><h1>DVR Forensic Extractor &mdash; User Manual</h1><div class="v">Version <span id="ver">2026.11.8</span></div></header>
 <div class="wrap">
 <nav>
  <b>Getting started</b>
@@ -156,9 +156,10 @@ DFX has only been tested against synthetic test images, not drives or exports fr
  <div class="l2"><b>Tabs</b> &mdash; Home · Carve · Signatures · Results · Help</div>
  <div class="l3"><b>Ribbon</b> &mdash; buttons and options for the selected tab, in labeled groups</div>
  <div class="l4"><div><b>Side panel</b><br>Case · Evidence · Job</div><div><b>Work area</b><br>Contents of the selected tab</div></div>
- <div class="l5"><b>Case log</b> &mdash; every action with a UTC time (also saved to <code>case_log.txt</code>)</div>
- <div class="l6"><b>Status bar</b> &mdash; job state, progress bar, percent, bytes done, speed and time remaining</div>
+ <div class="l5"><b>Case log</b> (hidden until opened) &mdash; every action with a UTC time (also saved to <code>case_log.txt</code>)</div>
+ <div class="l6"><b>Status bar</b> &mdash; job state, progress bar, percent, speed, time remaining, the latest log line, and the <b>Log</b> button</div>
 </div>
+<p>The <b>case log</b> is hidden so it doesn't take space from the work area. The status bar always shows the latest line. Click <b>Log &#9650;</b> (or the latest line) to open it, drag its top edge to resize it, and click <b>Log &#9660;</b> to hide it again. DFX remembers whether it was open and how tall. On short windows (for example a laptop with 150% display scaling), the ribbon switches to a compact single row.</p>
 <p>The <b>side panel</b> always shows:</p>
 <ul>
  <li>the open case</li>

@@ -2,6 +2,12 @@
 
 All versions are early development builds, **not yet tested on real DVR evidence**.
 
+## v2026.11.8 - no more scrolling for the log box
+- The case log panel is hidden by default. The status bar shows the latest log line; **Log ▲** (or clicking the line) opens it; drag its top edge to resize; open/closed and height are remembered.
+- Short windows (under 640 px tall, for example 150% display scaling) get a compact one-row ribbon. Checked at the examiner's window size (about 1274 × 466): no page scrolling on any tab.
+- Home tab no longer says E01 needs libewf-python (built in since v2026.11.5).
+- GitHub: the Windows Release Build now runs the full test matrix first and publishes nothing if a test fails; tag pushes no longer run a second, separate test workflow.
+
 ## v2026.11.7 - vendored files stay byte-identical on Windows
 - **Found by GitHub's Windows test run:** Git for Windows (`core.autocrlf`) checked out `ewfprobe.py` and `mediacarve.py` with CRLF line endings, so their SHA-256 no longer matched `vendored.json` and the byte-identical test failed (correctly). The release build would have bundled the converted copies.
 - New `.gitattributes`: `dfx/vendor/** -text`, so Git never converts the vendored files. Verified with a real `core.autocrlf=true` clone: README converts to CRLF, the vendored files stay byte-identical; without the file, both fail.

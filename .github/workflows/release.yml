@@ -5,7 +5,10 @@ on:
 permissions:
   contents: write
 jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml     # the release is built only if every test passes
   build:
+    needs: tests
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

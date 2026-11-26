@@ -1,5 +1,9 @@
 name: Test Cases
-on: [push, pull_request]
+on:
+  push:
+    branches: ["**"]        # branch pushes only; a tag push runs these tests inside the release build
+  pull_request:
+  workflow_call:            # the Windows Release Build calls this first
 jobs:
   test:
     runs-on: windows-latest
