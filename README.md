@@ -4,7 +4,7 @@
 > **New project — not yet tested on real DVR evidence.**
 > This is an early development build. It has only been tested against synthetic test images, not against drives or exports from real DVR/NVR recorders. Every built-in signature is unvalidated, and the Dahua DHAV offsets are partly unconfirmed. **Do not use it for casework** or rely on its results until it has been validated against known test data from real recorders.
 
-**Version 2026.11.8 — Build 1 + E01 built in (ewfprobe) + mediacarve length judge**
+**Version 2026.11.9 — Build 2: signature learner + hex viewer — Build 1 + E01 built in (ewfprobe) + mediacarve length judge**
 
 The full User Manual is built into the program (ribbon → **User Manual**) and is also at [`dfx/web/manual.html`](dfx/web/manual.html).
 
@@ -50,6 +50,9 @@ Copyright (c) 2026 Christopher A. Tankelewicz (ThinkTank4n6). MIT License, provi
   * Converts DVR ↔ actual time, with drift fitted from two or more measurements and automatic daylight-saving handling based on the recorder's DST setting.
   * Logs each conversion and prints an offset worksheet.
   * Carve reports can show corrected actual times.
+* **Signature learner (Build 2):** give it 3+ known-good samples (recorder exports, or byte ranges picked in the hex viewer). It finds the header, a repeating frame marker, the length field, the footer, a timestamp field and a channel field, writes a draft signature (never marked validated), and self-tests it by planting every sample in random data and carving it back.
+* **Hex viewer (read-only):** browse evidence or any file, find hex/text, see what selected bytes mean (integers, Unix/Dahua/FILETIME times), build a signature by marking header, length field and footer, and **Follow Length** to check the length field lands on the next header. **View in Hex** from Results.
+* **Windows Open dialog:** Image File, case folder and sample files use the normal Windows dialog (the built-in browser is the fallback).
 * **Signature editor**: create, copy or edit signatures, test them on a sample file, and import or export them as JSON. Imported signatures always start out unvalidated.
 
 ## Run
@@ -113,8 +116,8 @@ Measured speed on the build machine was about 220 MB/s with all signatures enabl
 
 ## Roadmap
 
-1. ~~Carving engine and signature format~~ (this build)
-2. Signature learner: common header and footer, repeating frame markers, length-field detection
+1. ~~Carving engine and signature format~~
+2. ~~Signature learner and hex viewer~~ (this build)
 3. Dahua stream layer: group frames by channel, sort by time, MP4 with a DVR-time subtitle track, frame map
 4. Filesystem detection
 5. Hikvision HIKBTREE parser, then the Dahua filesystem parser

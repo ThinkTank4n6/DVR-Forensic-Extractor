@@ -2,6 +2,12 @@
 
 All versions are early development builds, **not yet tested on real DVR evidence**.
 
+## v2026.11.9 - Build 2: signature learner and hex viewer
+- **Signature learner** (Signatures > Learn from Samples): drafts a signature from 3+ samples - header (variable bytes become ??), frame marker, length field (any offset, 1/2/4/8 bytes, either byte order, with adjust), footer and the bytes after it, timestamp field (Dahua packed or Unix; must never go backwards inside a sample) and channel field (suggestion). Bytes inside a learned field are wildcarded so the header can't overfit small samples. Every finding states its evidence. The draft is self-tested by planting each sample in random data and carving it back; drafts are never marked validated. Learns the Dahua DHAV layout exactly from three exports.
+- **Hex viewer** (Hex tab), read-only: evidence or any file, 1 KB pages, go to offset, find hex (with ??) or text (searches 2 GB per click), selection with integer and time interpretations, Use as Header / Length Field / Use as Footer, **Follow Length** (checks the length lands on the next header and walks frame to frame), Open in Editor, Add as Sample (evidence ranges for the learner). **View in Hex** on the Results tab.
+- **Windows Open dialog** for Image File, the case folder and learner samples (runs in a child process; the built-in browser is the fallback).
+- Messages that must stay visible now use a pop-up note instead of the status bar.
+
 ## v2026.11.8 - no more scrolling for the log box
 - The case log panel is hidden by default. The status bar shows the latest log line; **Log ▲** (or clicking the line) opens it; drag its top edge to resize; open/closed and height are remembered.
 - Short windows (under 640 px tall, for example 150% display scaling) get a compact one-row ribbon. Checked at the examiner's window size (about 1274 × 466): no page scrolling on any tab.

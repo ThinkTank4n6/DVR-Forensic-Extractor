@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import shutil
 import sys
 
@@ -47,11 +48,41 @@ def main(argv=None):
     s.add_argument("--check", metavar="FILE")
     sub.add_parser("drives")
     sub.add_parser("doctor")
+    pk = sub.add_parser("pick", help="(used by the GUI) show a native Open dialog, print JSON")
+    pk.add_argument("mode", choices=["file", "files", "folder"])
+    pk.add_argument("title", nargs="?", default="")
     a = ap.parse_args(argv)
 
     if a.cmd in (None, "gui"):
         from .server import serve
         return serve(port=getattr(a, "port", DEFAULT_PORT), open_browser=not getattr(a, "no_browser", False)) or 0
+
+    if a.cmd == "pick":
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+        except ImportError as e:
+            print(json.dumps({"error": f"tkinter is not available ({e})"}))
+            return 1
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            root.attributes("-topmost", True)
+        except tk.TclError:
+            pass
+        title = a.title or {"file": "Open evidence or sample file", "files": "Choose sample files",
+                            "folder": "Choose a folder"}[a.mode]
+        if a.mode == "file":
+            p = filedialog.askopenfilename(parent=root, title=title)
+            paths = [p] if p else []
+        elif a.mode == "files":
+            paths = list(filedialog.askopenfilenames(parent=root, title=title))
+        else:
+            p = filedialog.askdirectory(parent=root, title=title, mustexist=False)
+            paths = [p] if p else []
+        root.destroy()
+        print(json.dumps({"paths": [str(Path(x)) for x in paths]}))
+        return 0
 
     from .server import config_dir
     from .carve import SignatureLibrary, Carver, CarveOptions, check

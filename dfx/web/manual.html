@@ -48,7 +48,7 @@ ol li,ul li{margin:3px 0}
 </style>
 </head>
 <body>
-<header><div class="logo">DFX</div><h1>DVR Forensic Extractor &mdash; User Manual</h1><div class="v">Version <span id="ver">2026.11.8</span></div></header>
+<header><div class="logo">DFX</div><h1>DVR Forensic Extractor &mdash; User Manual</h1><div class="v">Version <span id="ver">2026.11.9</span></div></header>
 <div class="wrap">
 <nav>
  <b>Getting started</b>
@@ -67,7 +67,10 @@ ol li,ul li{margin:3px 0}
  <a href="#sigs">Signatures tab</a>
  <a class="s" href="#editor">Signature editor</a>
  <a class="s" href="#testing">Testing a signature</a>
+ <a class="s" href="#learner">Learning from samples</a>
  <a href="#results">Results tab</a>
+ <a href="#hex">Hex tab</a>
+ <a class="s" href="#hex-build">Building a signature in hex</a>
  <a href="#help">Help tab</a>
  <b>Reference</b>
  <a href="#modes">Carving modes</a>
@@ -94,8 +97,7 @@ ol li,ul li{margin:3px 0}
 DFX has only been tested against synthetic test images, not drives or exports from real DVR/NVR recorders. Every built-in signature is <b>unvalidated</b>, and the Dahua DHAV offsets are partly unconfirmed. Do not use DFX for casework, or rely on its results, until it has been validated against known test data from real recorders.</div>
 <p>This manual covers <b>Build 1 (carving engine)</b>. These features are planned for later builds and are <b>not</b> in this version:</p>
 <ul>
- <li>the signature learner</li>
- <li>Dahua/Hikvision stream rebuilding and MP4 conversion with DVR timestamps</li>
+  <li>Dahua/Hikvision stream rebuilding and MP4 conversion with DVR timestamps</li>
  <li>filesystem detection</li>
  <li>DVR filesystem parsing (Hikvision HIKBTREE, Dahua)</li>
 </ul>
@@ -177,7 +179,7 @@ DFX has only been tested against synthetic test images, not drives or exports fr
 <tr><th>Button</th><th>What it does</th></tr>
 <tr><td><span class="btn">New / Open Case</span></td><td>Choose a case folder. A folder that already holds a <code>case.json</code> is reopened; any other folder becomes a new case. Enter the case number, examiner, agency and description; these print on every report. The last case opened is reopened automatically the next time DFX starts.</td></tr>
 <tr><td><span class="btn">Case Folder</span></td><td>Opens the case folder in File Explorer.</td></tr>
-<tr><td><span class="btn">Image File</span></td><td>Choose an evidence image with the built-in file browser, or type a full path and press Enter. Supported:
+<tr><td><span class="btn">Image File</span></td><td>Opens the normal <b>Windows Open dialog</b>. (If it can't be shown, DFX's built-in browser opens instead: click through folders, or paste a full path and press Enter.) Supported:
   <ul>
    <li>raw, dd, img and bin files</li>
    <li>split images (choose the <code>.001</code> file; DFX joins the rest)</li>
@@ -346,10 +348,32 @@ DFX has only been tested against synthetic test images, not drives or exports fr
 </ol>
 <div class="tip">The test runs on what's in the editor, even before you save, so you can try changes safely.</div>
 
+
+<h3 id="learner">Learning from samples</h3>
+<p><span class="btn">Learn from Samples</span> drafts a signature from files you know are good: exports made by the recorder itself, or byte ranges you mark in the <a href="#hex">Hex tab</a>.</p>
+<ol>
+ <li>Click <span class="btn">Learn from Samples</span>, then <b>Add Files…</b>. Add <b>3 or more</b> samples of one format, ideally from <b>different channels</b> and different times. With fewer than 3, DFX can't tell fixed bytes from bytes that just happen to match, and says so.</li>
+ <li>Optionally type a signature ID and name, then click <b>Run Learner</b>.</li>
+ <li>Read the <b>Findings</b>. Every finding says what backs it, for example "equals the distance to the next frame in 93 of 93 frames".</li>
+ <li>Check the <b>Self-test</b>. Each sample was planted in random data and carved back with the draft. Every row must say <b>exact</b>, and there should be no extra hits in the random data.</li>
+ <li>Click <b>Open in Editor</b> to review, adjust and save the draft. It is saved <b>unvalidated</b>; validate it on real evidence before relying on it (see <a href="#validate">Validating signatures</a>).</li>
+</ol>
+<table>
+<tr><th>The learner looks for</th><th>How</th></tr>
+<tr><td>Header</td><td>Bytes every sample (or every frame) starts with. Bytes that differ become <code>??</code>. Bytes inside a learned length or timestamp field always become <code>??</code>, even if the samples agree, so a header can't be tied to small files.</td></tr>
+<tr><td>Frame marker</td><td>The header repeating inside every sample, always starting at byte 0: a stream of frames (like Dahua DHAV). The shortest marker that explains the frames is used, so a frame-type byte (keyframe vs. other frames) isn't mistaken for part of the marker.</td></tr>
+<tr><td>Length field</td><td>A 1-, 2-, 4- or 8-byte number in each frame (or file) header, either byte order, that equals the distance to the next frame (or the file size), plus or minus a constant (<i>adjust</i>). It must hold for at least 90% of frames.</td></tr>
+<tr><td>Footer</td><td>2 or 4 bytes at the same distance from the end of every frame or file; bytes after it become <i>bytes after footer</i>.</td></tr>
+<tr><td>Timestamp (candidate)</td><td>A field that decodes to plausible Dahua-packed or Unix times that <b>never go backwards inside a sample</b>. Check it against the times you recorded.</td></tr>
+<tr><td>Channel (suggestion)</td><td>A small number that is constant inside each sample but differs between samples. Confirm it with samples from channels you know.</td></tr>
+</table>
+<p>On large samples, fields are checked on the first 2,000 frames of each sample (the findings say so). Every run is recorded in the case log.</p>
+
 <h2 id="results">Results tab</h2>
 <div class="ribbon">
  <div class="g"><div><span>Refresh</span></div><small>Runs</small></div>
  <div class="g"><div><span>Open Report</span><span>Rebuild Report</span><span>Open Run Folder</span></div><small>Output</small></div>
+ <div class="g"><div><span>View in Hex</span></div><small>Item</small></div>
 </div>
 <p>The upper table lists every run in the case. The newest run is selected; click a row to select another. Each run's state is one of these:</p>
 <table>
@@ -371,6 +395,7 @@ DFX has only been tested against synthetic test images, not drives or exports fr
 <tr><td><span class="btn">Open Report</span></td><td>Opens the selected run's <code>report.html</code> in a new tab. Print it to PDF from the browser.</td></tr>
 <tr><td><span class="btn">Rebuild Report</span></td><td>Regenerates the report, for example after you hash the evidence or update case details.</td></tr>
 <tr><td><span class="btn">Open Run Folder</span></td><td>Opens the run folder in File Explorer.</td></tr>
+<tr><td><span class="btn">View in Hex</span></td><td>Click an item in the Items table, then this: the Hex tab opens at the item's offset in the evidence, with the item shaded.</td></tr>
 </table>
 <p>Item statuses:</p>
 <ul>
@@ -378,6 +403,36 @@ DFX has only been tested against synthetic test images, not drives or exports fr
  <li><b>logged</b>: found in a dry run.</li>
  <li><b>incomplete</b>: copied, but truncated or missing a required part (for example an MP4 with no <code>moov</code> box). Read the notes.</li>
 </ul>
+
+
+<h2 id="hex">Hex tab</h2>
+<div class="ribbon">
+ <div class="g"><div><span>Evidence</span><span>Open File</span></div><small>Source</small></div>
+ <div class="g"><div><span>Previous</span><span>Next</span><span>Offset · Find · Go · Find next</span></div><small>Navigate</small></div>
+ <div class="g"><div><span>Use as Header</span><span>Length Field</span><span>Use as Footer</span><span>Follow Length</span><span>Open in Editor</span></div><small>Build signature</small></div>
+ <div class="g"><div><span>Add as Sample</span></div><small>Learner</small></div>
+</div>
+<div class="tip">The hex viewer is <b>read-only</b>. It cannot change evidence or files. What examiners adjust is the <b>signature</b>, which is how a recovery method can be defended.</div>
+<table>
+<tr><th>Control</th><th>What it does</th></tr>
+<tr><td><span class="btn">Evidence</span> / <span class="btn">Open File</span></td><td>Shows the selected evidence (raw, E01, drive) or any other file, such as an export from the recorder.</td></tr>
+<tr><td><span class="btn">Previous</span> / <span class="btn">Next</span></td><td>Moves one 1 KB page.</td></tr>
+<tr><td>Offset + <b>Go</b></td><td>Jumps to an offset: decimal (<code>4096</code>) or hex (<code>0x1000</code>).</td></tr>
+<tr><td>Find + <b>Find next</b></td><td>Searches forward from the selection for hex bytes (<code>44 48 41 56</code>, <code>??</code> = any byte) or text. Each click searches up to 2 GB; click again to continue.</td></tr>
+<tr><td>Selecting bytes</td><td>Click a byte; <b>Shift+click</b> to extend. The <b>Selection</b> panel shows the offset, length, hex, and what the bytes mean as numbers (both byte orders), Unix time, Dahua packed time, FILETIME and text.</td></tr>
+<tr><td><span class="btn">Add as Sample</span></td><td>Adds the selected range (or a length you type) to the <a href="#learner">learner</a>. Useful for a frame stream you can see in the evidence but have no export of.</td></tr>
+</table>
+
+<h3 id="hex-build">Building a signature in hex</h3>
+<ol>
+ <li><b>Find</b> a known header, such as <code>44 48 41 56</code>.</li>
+ <li>Select the first bytes of the frame or file (2 to 32 bytes) and click <span class="btn">Use as Header</span>. They're outlined in green.</li>
+ <li>Select the bytes you think hold the size (1, 2, 4 or 8) and click <span class="btn">Length Field</span>. They turn blue. In <b>Signature being built</b>, choose the byte order and adjust; DFX shows the value and where the next item would start.</li>
+ <li>Click <span class="btn">Follow Length</span>. DFX jumps there and tells you whether the header is really there ("Length field checks out"). Keep clicking to walk from frame to frame.</li>
+ <li>Optionally select footer bytes and click <span class="btn">Use as Footer</span>.</li>
+ <li>Tick <b>a stream of frames</b> for DVR frame streams (frame_chain), or untick it for whole files (header_length).</li>
+ <li>Click <span class="btn">Open in Editor</span>, review it, and use <span class="btn">Test on File</span> before saving.</li>
+</ol>
 
 <h2 id="help">Help tab</h2>
 <div class="ribbon"><div class="g"><div><span>User Manual</span><span>About</span></div><small>Help</small></div></div>
@@ -546,6 +601,7 @@ python -m dfx doctor</code></pre>
 <tr><td>"… is encrypted; DFX can't open encrypted images yet"</td><td>Decrypt or convert the image first.</td></tr>
 <tr><td>"made by an older version of DFX" / "length judge changed" on Resume</td><td>Runs can't be resumed across DFX updates. Start a new scan.</td></tr>
 <tr><td>Browser shows "can't reach this page"</td><td>The console window was closed. Start DFX again.</td></tr>
+<tr><td>The Windows Open dialog doesn't appear (DFX's own browser opens instead)</td><td>Python was installed without Tcl/Tk. Re-run the Python installer, choose <b>Modify</b>, and tick <b>tcl/tk and IDLE</b>. The release build (DFX.exe) includes it.</td></tr>
 <tr><td>"could not start on port 8788"</td><td>Another DFX (or another program) is using the port. Open <code>http://127.0.0.1:8788/</code> to use the running copy, or start with <code>--port 8790</code>.</td></tr>
 <tr><td>"can't change the evidence while a … job is running"</td><td>Wait for the job, or click <span class="btn">Cancel Job</span> on the Home tab.</td></tr>
 <tr><td>"Warning: checkpoint not saved … will retry" in the case log</td><td>Antivirus, the Search indexer or a backup tool held the checkpoint file. The scan keeps going; the next checkpoint retries. If it happens constantly, exclude the case folder from real-time scanning (with your lab's approval).</td></tr>

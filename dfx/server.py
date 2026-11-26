@@ -270,7 +270,7 @@ class App:
             info = {"name": r.name, "complete": sess.exists()}
             if sess.exists():
                 s = json.loads(sess.read_text(encoding="utf-8"))
-                info.update(items=s["stats"]["items"], canceled=s["stats"]["canceled"],
+                info.update(items=s["stats"]["items"], canceled=s["stats"]["canceled"], source=s["source"]["path"],
                             finished=s["stats"]["finished"], dry_run=s["options"]["dry_run"])
             out.append(info)
         return out
@@ -299,6 +299,78 @@ class App:
             return {"items": [i.row() for i in c.items], "rejected": st.rejected,
                     "scanned": st.scanned, "source_size": s.size,
                     "capped": s.size > cap, "max_items_hit": len(c.items) >= limit}
+
+    # ---------------------------------------------------------------- hex viewer (read-only)
+    HEX_MAX = 64 * 1024
+
+    def _hex_source(self, data: dict):
+        if data.get("target") == "evidence":
+            if not self.source:
+                raise ValueError("select evidence first")
+            return open_source(self.source["path"])
+        path = (data.get("path") or "").strip()
+        if not path:
+            raise ValueError("choose a file")
+        return open_source(path)
+
+    def hex_read(self, data: dict) -> dict:
+        with self._hex_source(data) as s:
+            off = max(0, min(int(data.get("offset") or 0), max(0, s.size - 1)))
+            n = max(1, min(int(data.get("length") or 1024), self.HEX_MAX))
+            b = s.read_full(off, n)
+            return {"size": s.size, "offset": off, "hex": b.hex(), "path": s.path, "kind": s.kind}
+
+    def hex_find(self, data: dict) -> dict:
+        import re
+        from .carve.signatures import hex_to_regex, parse_hex
+        q = (data.get("query") or "")
+        if not q:
+            raise ValueError("enter hex bytes (?? = any byte) or text")
+        if data.get("mode") == "text":
+            rx = re.compile(re.escape(q.encode("utf-8")), re.IGNORECASE if data.get("nocase") else 0)
+            qlen = len(q.encode("utf-8"))
+        else:
+            rx = re.compile(hex_to_regex(q), re.DOTALL)
+            qlen = len(parse_hex(q))
+        limit = int(data.get("max_scan") or 2 * 1024 ** 3)
+        chunk = 32 * 1024 * 1024
+        with self._hex_source(data) as s:
+            pos = max(0, int(data.get("offset") or 0))
+            end = min(s.size, pos + limit)
+            while pos < end:
+                buf = s.read_full(pos, min(chunk + qlen, end - pos + qlen))
+                if not buf:
+                    break
+                m = rx.search(buf)
+                if m and m.start() < chunk:
+                    return {"found": pos + m.start(), "scanned": pos + m.start() - int(data.get("offset") or 0)}
+                pos += chunk
+            return {"found": None, "scanned": end - int(data.get("offset") or 0), "stopped_at": end,
+                    "end_of_source": end >= s.size}
+
+    # ---------------------------------------------------------------- learner
+    LEARN_RANGE_MAX = 64 * 1024 * 1024
+
+    def learn(self, data: dict) -> dict:
+        from .learn import learn, sample_from_file, sample_from_bytes
+        samples = []
+        for it in data.get("samples") or []:
+            if it.get("kind") == "evidence":
+                if not self.source:
+                    raise ValueError("select evidence first")
+                off, ln = int(it["offset"]), int(it["length"])
+                if ln <= 0 or ln > self.LEARN_RANGE_MAX:
+                    raise ValueError(f"an evidence sample must be 1 byte to {self.LEARN_RANGE_MAX // 1048576} MB")
+                with open_source(self.source["path"]) as s:
+                    b = s.read_full(off, ln)
+                samples.append(sample_from_bytes(f"evidence@0x{off:X}", b,
+                                                 f"{self.source['path']} @ 0x{off:X} (+{ln:,})"))
+            else:
+                samples.append(sample_from_file(it["path"]))
+        r = learn(samples, sig_id=(data.get("id") or "").strip(), name=(data.get("name") or "").strip())
+        self.case_log(f"Signature learner ran on {len(samples)} sample(s): mode {r['signature']['mode']}, "
+                      f"header {r['signature']['header']}, self-test {'passed' if r['self_test']['passed'] else 'FAILED'}")
+        return r
 
     def state(self):
         with self._lock:
@@ -331,6 +403,27 @@ def browse(path: str):
         return {"path": str(p), "parent": str(p.parent), "dirs": [], "files": [], "error": str(e)}
     parent = "" if p.parent == p else str(p.parent)
     return {"path": str(p), "parent": parent, "dirs": dirs, "files": files}
+
+
+def native_pick(mode: str, title: str = "") -> dict:
+    """Show a real Windows Open dialog. Runs in a child process (`dfx pick`): Tk must
+    own its own main thread, and a crash there can't take the server down."""
+    import subprocess
+    mode = mode if mode in ("file", "files", "folder") else "file"
+    cmd = ([sys.executable, "pick", mode, title] if getattr(sys, "frozen", False)
+           else [sys.executable, "-m", "dfx", "pick", mode, title])
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except subprocess.TimeoutExpired:
+        return {"paths": [], "error": "the Open dialog timed out"}
+    try:
+        out = json.loads(r.stdout.strip().splitlines()[-1]) if r.stdout.strip() else {}
+    except (ValueError, IndexError):
+        out = {}
+    if r.returncode != 0 or "paths" not in out:
+        return {"paths": [], "error": out.get("error") or (r.stderr.strip()[-300:] or "the Open dialog is not available")}
+    return out
 
 
 def open_in_os(path: Path):
@@ -494,6 +587,14 @@ def make_handler(app: App, port: int):
                     build_clock_report(d, app.case, out)
                     app.case_log(f"Clock offset worksheet written: {out}")
                     return self._json({"url": f"/clock/{d['id']}/report.html"})
+                if p == "/api/hex":
+                    return self._json(app.hex_read(data))
+                if p == "/api/hex/find":
+                    return self._json(app.hex_find(data))
+                if p == "/api/learn":
+                    return self._json(app.learn(data))
+                if p == "/api/pick":
+                    return self._json(native_pick(data.get("mode", "file"), data.get("title", "")))
                 if p == "/api/report":
                     run = Path(app.case["folder"]) / "runs" / Path(data.get("run", "")).name
                     sess = json.loads((run / "carve_session.json").read_text(encoding="utf-8"))

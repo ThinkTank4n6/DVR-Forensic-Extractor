@@ -88,6 +88,24 @@ tr.click{cursor:pointer}
 .offbig.fast{color:#b3261e}.offbig.slow{color:#1f5f99}
 .link{color:#1f5f99;cursor:pointer;font-weight:600;background:none;border:0;padding:0;font-size:14px}
 .notes div{background:var(--amberbg);border-left:3px solid var(--amber);padding:5px 8px;margin-top:5px;font-size:12px}
+/* hex viewer */
+.hx{display:grid;grid-template-columns:1fr 330px;gap:12px;align-items:start}
+.hxgrid{font-family:Consolas,"Cascadia Mono",monospace;font-size:12.5px;line-height:1.55;user-select:none;overflow:auto;max-height:calc(100vh - 230px)}
+.hxrow{display:flex;gap:14px;white-space:pre}
+.hxoff{color:var(--muted)}
+.hxbytes span,.hxasc span{cursor:pointer;padding:0 1px;border-radius:2px}
+.hxbytes span{display:inline-block;width:2.1ch;text-align:center;margin-right:.6ch}
+.hxbytes span:nth-child(8){margin-right:1.4ch}
+.hxasc span{display:inline-block;width:1ch}
+.hxsel{background:var(--amber)!important;color:var(--graphite)}
+.hxhdr{outline:2px solid #2e7d4f;background:#e3f3ea}
+.hxlen{background:#dce9f7}
+.hxfoot{background:#f3e1f7}
+.hxhl{background:#fff4e0}
+.kvs{display:grid;grid-template-columns:118px 1fr;gap:2px 8px;font-size:12px}
+.kvs div:nth-child(odd){color:var(--muted)}
+.legend span{display:inline-block;padding:0 6px;margin-right:4px;border-radius:3px;font-size:11px}
+@media (max-height:640px){.hxgrid{max-height:calc(100vh - 150px)}}
 /* status bar */
 .status{background:var(--graphite);color:#dfe7ee;display:flex;align-items:center;gap:12px;padding:5px 12px;font-size:12px}
 .bar{flex:0 0 260px;height:10px;background:var(--graphite3);border-radius:5px;overflow:hidden}
@@ -98,6 +116,10 @@ tr.click{cursor:pointer}
 .loggrip:hover{background:var(--amber)}
 .logpane{height:150px;color:#c5d1dc;font-family:Consolas,monospace;font-size:11.5px;overflow:auto;padding:6px 10px;white-space:pre-wrap}
 .status .lastlog{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9fb0c0;font-family:Consolas,monospace;font-size:11.5px}
+.toast{position:fixed;right:16px;bottom:40px;max-width:520px;background:var(--graphite);color:#fff;border-left:4px solid var(--amber);
+  padding:8px 12px;border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,.3);font-size:13px;z-index:20;display:none}
+.toast.show{display:block}
+.toast.ok{border-left-color:#4caf7d}.toast.bad{border-left-color:#e5534b}
 .logbtn{background:var(--graphite3);color:#fff;border:0;border-radius:3px;padding:2px 9px;cursor:pointer;font-size:12px;white-space:nowrap}
 .logbtn:hover{background:var(--amber);color:var(--graphite)}
 @media (max-height:640px){
@@ -136,6 +158,7 @@ tr.click{cursor:pointer}
   <div class="tab" data-tab="carve">Carve</div>
   <div class="tab" data-tab="sigs">Signatures</div>
   <div class="tab" data-tab="results">Results</div>
+  <div class="tab" data-tab="hex">Hex</div>
   <div class="tab" data-tab="help">Help</div>
 </div>
 <div class="ribbon" id="ribbon"></div>
@@ -150,6 +173,7 @@ tr.click{cursor:pointer}
 <div class="logwrap" id="logwrap"><div class="loggrip" id="loggrip" title="Drag to resize"></div><div class="logpane" id="log"></div></div>
 <div class="status"><span id="stText">Ready</span><div class="bar"><i id="stBar"></i></div><span id="stPct"></span><span class="lastlog" id="lastlog"></span><span class="muted">Evidence is opened read-only</span><button class="logbtn" id="logbtn" title="Show or hide the case log">Log &#9650;</button></div>
 
+<div class="toast" id="toast"></div>
 <div class="modal" id="modal"><div class="dlg"><header id="mTitle"></header><div class="body" id="mBody"></div><footer id="mFoot"></footer></div></div>
 
 <script>
@@ -161,7 +185,7 @@ async function api(path,body){
   const o=body===undefined?{}:{method:"POST",headers:{"Content-Type":"application/json","X-DFX-Token":TOKEN},body:JSON.stringify(body)};
   const r=await fetch(path,o);const j=await r.json();if(!r.ok)throw new Error(j.error||r.statusText);return j;
 }
-let S={},SIGS=[],TAB="home",SELRUN="",EDIT=null,lastLogLen=0;
+let S={},SIGS=[],TAB="home",SELRUN="",EDIT=null,lastLogLen=0,SELITEM=null,RUNS=[];
 
 /* ---------------- icons ---------------- */
 const I={
@@ -188,6 +212,15 @@ const I={
  save:'<svg viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/></svg>',
  swap:'<svg viewBox="0 0 24 24"><path d="M4 8h14l-4-4M20 16H6l4 4"/></svg>',
  live:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7"/></svg>',
+ hexi:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h2M11 9h2M15 9h2M7 13h2M11 13h2M7 17h2"/></svg>',
+ left:'<svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>',
+ right:'<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>',
+ find:'<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>',
+ hdr:'<svg viewBox="0 0 24 24"><path d="M4 4h16v5H4z"/><path d="M4 13h10M4 17h7"/></svg>',
+ len:'<svg viewBox="0 0 24 24"><path d="M3 12h18M3 8v8M21 8v8M7 12l-2-2M7 12l-2 2M17 12l2-2M17 12l2 2"/></svg>',
+ foot:'<svg viewBox="0 0 24 24"><path d="M4 15h16v5H4z"/><path d="M4 5h10M4 9h7"/></svg>',
+ jump:'<svg viewBox="0 0 24 24"><path d="M5 18c2-8 8-12 14-12"/><path d="M15 3l4 3-4 3"/></svg>',
+ learn:'<svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M7 11v5c3 2 7 2 10 0v-5"/></svg>',
  help:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg>',
 };
 const rb=(id,icon,label,primary)=>`<button class="rbtn ${primary?'primary':''}" id="${id}">${I[icon]}<span>${label}</span></button>`;
@@ -220,10 +253,20 @@ function ribbon(){
   if(TAB==="sigs") R.innerHTML=
     grp("Library",rb("bSigNew","add","New",1)+rb("bSigEdit","edit","Edit / Copy")+rb("bSigDel","del","Delete"))+
     grp("Exchange",rb("bSigImp","imp","Import JSON")+rb("bSigExp","exp","Export JSON"))+
-    grp("Check",rb("bSigTest","test","Test on File",1));
+    grp("Check",rb("bSigTest","test","Test on File",1))+
+    grp("Learn",rb("bLearn","learn","Learn from Samples",1));
   if(TAB==="results") R.innerHTML=
     grp("Runs",rb("bRefresh","refresh","Refresh"))+
-    grp("Output",rb("bReport","report","Open Report",1)+rb("bRebuild","report","Rebuild Report")+rb("bOpenRun","folder","Open Run Folder"));
+    grp("Output",rb("bReport","report","Open Report",1)+rb("bRebuild","report","Rebuild Report")+rb("bOpenRun","folder","Open Run Folder"))+
+    grp("Item",rb("bViewHex","hexi","View in Hex"));
+  if(TAB==="hex") R.innerHTML=
+    grp("Source",rb("bHxEv","drive","Evidence",1)+rb("bHxFile","file","Open File"))+
+    grp("Navigate",rb("bHxPrev","left","Previous")+rb("bHxNext","right","Next")+`<div class="rcol">
+       <label>Offset <input type="text" id="hxGo" placeholder="0x1000 or 4096"></label>
+       <label>Find <input type="text" id="hxQ" placeholder="44 48 41 56 or text"></label>
+       <label><select id="hxQm"><option value="hex">hex</option><option value="text">text</option></select> <button class="btn" id="hxGoB">Go</button> <button class="btn" id="hxFindB">Find next</button></label></div>`)+
+    grp("Build signature",rb("bHxHdr","hdr","Use as Header",1)+rb("bHxLen","len","Length Field")+rb("bHxFoot","foot","Use as Footer")+rb("bHxFollow","jump","Follow Length")+rb("bHxEdit","edit","Open in Editor"))+
+    grp("Learner",rb("bHxSample","learn","Add as Sample"));
   if(TAB==="help") R.innerHTML=grp("Help",rb("bManual","book","User Manual",1)+rb("bAbout","help","About"));
   wire();
 }
@@ -250,18 +293,20 @@ function content(){
      </table><p class="muted">Unvalidated signatures are flagged in the report. Dahua DHAV is off by default until you validate it.</p></div>`;
   }
   if(TAB==="sigs"){
-    C.innerHTML=`<div class="card"><h2>Signature library</h2>
+    C.innerHTML=(LRN.open?learnerCard():"")+`<div class="card"><h2>Signature library</h2>
      <table id="sigTable"><tr><th>Name</th><th>ID</th><th>Mode</th><th>Header</th><th>Footer</th><th>Max size</th><th>Validated</th><th>Source</th></tr>
      ${SIGS.map(s=>`<tr class="click ${EDIT&&EDIT.id===s.id?'sel':''}" data-id="${esc(s.id)}"><td>${esc(s.name)}</td><td class="mono">${esc(s.id)}</td><td>${esc(s.mode)}</td>
        <td class="mono">${esc(s.header)}</td><td class="mono">${esc(s.footer)}</td><td>${fmt(s.max_size)}</td>
        <td>${s.validated?'<span class="pill ok">Yes</span>':'<span class="pill no">No</span>'}</td><td><span class="pill n">${esc(s.origin)}</span></td></tr>`).join("")}
      </table></div><div id="sigEditor"></div>`;
     C.querySelectorAll("#sigTable tr[data-id]").forEach(tr=>tr.onclick=()=>{EDIT=SIGS.find(s=>s.id===tr.dataset.id);content();});
+    if(LRN.open)wireLearner();
     if(EDIT&&EDIT._editing) editor();
     else if(EDIT) $("#sigEditor").innerHTML=`<div class="card"><h2>${esc(EDIT.name)}</h2><pre class="mono" style="font-size:11.5px">${esc(JSON.stringify(strip(EDIT),null,2))}</pre></div>`;
   }
   if(TAB==="results") loadRuns();
   if(TAB==="clock") renderClock();
+  if(TAB==="hex") renderHex();
   if(TAB==="help"){
     C.innerHTML=`<div class="card"><h2>User Manual</h2><p>The full manual covers every ribbon button, the signature editor, output files, validation and troubleshooting. <button class="btn amber" onclick="window.open('/manual','_blank')">Open User Manual</button></p></div><div class="card"><h2>Carving modes</h2><table>
      <tr><th>header_footer</th><td>From the header to the first (or last) footer within max size.</td></tr>
@@ -364,9 +409,12 @@ async function loadRuns(){
    ${runs.map(r=>`<tr class="click ${r.name===SELRUN?'sel':''}" data-run="${esc(r.name)}"><td class="mono">${esc(r.name)}</td><td>${r.items??""}</td><td>${esc(r.finished||"")}</td>
      <td>${!r.complete?'<span class="pill n">running / interrupted</span>':r.canceled?'<span class="pill no">canceled - resumable</span>':r.dry_run?'<span class="pill n">dry run</span>':'<span class="pill ok">complete</span>'}</td></tr>`).join("")||"<tr><td colspan=4>No runs yet</td></tr>"}</table></div>
    <div class="card"><h2>Items ${SELRUN?"&mdash; "+esc(SELRUN):""}</h2><table><tr><th>#</th><th>Signature</th><th>Offset</th><th>Length</th><th>Length is</th><th>Status</th><th>Frames</th><th>Ch</th><th>First (device)</th><th>Last (device)</th><th>File</th><th>Notes</th></tr>
-   ${items.map(i=>`<tr><td>${i.item_no}</td><td>${esc(i.signature_name)}</td><td class="mono">${esc(i.start_hex)}</td><td>${Number(i.length).toLocaleString()}</td><td>${esc(i.bounded||"")}</td><td>${esc(i.status)}</td>
+   ${items.map(i=>`<tr class="click ${SELITEM&&SELITEM.item_no===i.item_no?'sel':''}" data-item="${esc(i.item_no)}"><td>${i.item_no}</td><td>${esc(i.signature_name)}</td><td class="mono">${esc(i.start_hex)}</td><td>${Number(i.length).toLocaleString()}</td><td>${esc(i.bounded||"")}</td><td>${esc(i.status)}</td>
      <td>${i.frames!=="0"?esc(i.frames):""}</td><td>${esc(i.channels)}</td><td>${esc(i.first_time)}</td><td>${esc(i.last_time)}</td><td class="mono" style="font-size:11px">${esc(i.file)}</td><td>${esc(i.notes)}</td></tr>`).join("")||"<tr><td colspan=12>No items</td></tr>"}</table></div>`;
-  C.querySelectorAll("tr[data-run]").forEach(tr=>tr.onclick=()=>{SELRUN=tr.dataset.run;loadRuns()});
+  C.querySelectorAll("tr[data-run]").forEach(tr=>tr.onclick=()=>{SELRUN=tr.dataset.run;SELITEM=null;loadRuns()});
+  RUNS=runs;
+  C.querySelectorAll("tr[data-item]").forEach(tr=>tr.onclick=()=>{SELITEM=items.find(x=>String(x.item_no)===tr.dataset.item);
+    C.querySelectorAll("tr[data-item]").forEach(r=>r.classList.toggle("sel",r===tr))});
 }
 
 /* ---------------- dialogs ---------------- */
@@ -408,7 +456,7 @@ function caseDialog(){
     <label>Description</label><textarea id="cDesc" rows="3">${esc(c.description||"")}</textarea></div><div class="err" id="cErr"></div>`,
    [["Cancel",closeModal],["Open Case",async()=>{try{await api("/api/case",{folder:$("#cFolder").value,case_number:$("#cNum").value,examiner:$("#cEx").value,agency:$("#cAg").value,description:$("#cDesc").value});closeModal();refresh()}catch(e){$("#cErr").textContent=e.message}},"amber"]]);
   $("#cBrowse").onclick=()=>{const keep={n:$("#cNum").value,e:$("#cEx").value,a:$("#cAg").value,d:$("#cDesc").value};
-    browser("Choose case folder",false,p=>{caseDialog();$("#cFolder").value=p;$("#cNum").value=keep.n;$("#cEx").value=keep.e;$("#cAg").value=keep.a;$("#cDesc").value=keep.d})};
+    pickFolderAny("Choose case folder",p=>{caseDialog();$("#cFolder").value=p;$("#cNum").value=keep.n;$("#cEx").value=keep.e;$("#cAg").value=keep.a;$("#cDesc").value=keep.d})};
 }
 async function driveDialog(){
   modal("Physical Drive","<p class='muted'>Looking for drives&hellip;</p>",[["Cancel",closeModal]]);
@@ -425,7 +473,7 @@ function on(id,fn){const e=document.getElementById(id);if(e)e.onclick=fn}
 function wire(){
   on("bNewCase",caseDialog);
   on("bCaseFolder",()=>api("/api/open",{}).catch(e=>alert(e.message)));
-  on("bImage",()=>pickFile("Choose evidence image",setSource));
+  on("bImage",()=>pickFileAny("Choose evidence image (.E01, .dd, .001, .img ...)",setSource));
   on("bDrive",driveDialog);
   on("bHash",()=>api("/api/hash",{}).catch(e=>alert(e.message)));
   on("bGoCarve",()=>setTab("carve"));
@@ -469,6 +517,35 @@ function wire(){
   on("bClockRep",async()=>{const d=selDvr();if(!d)return alert("Select a DVR first.");
     try{const r=await api("/api/clock/report",{dvr_id:d.id});window.open(r.url,"_blank")}catch(e){alert(e.message)}});
   on("bRefresh",loadRuns);
+  on("bHxEv",()=>hexOpen("evidence","",0));
+  on("bHxFile",()=>pickFileAny("Open a file in the hex viewer",p=>hexOpen("file",p,0)));
+  on("bHxPrev",()=>{if(HX.bytes){HX.bytes=null;HX.offset=Math.max(0,HX.offset-HX.page);renderHex()}});
+  on("bHxNext",()=>{if(HX.bytes&&HX.offset+HX.page<HX.size){HX.bytes=null;HX.offset+=HX.page;renderHex()}});
+  on("hxGoB",()=>{const n=parseNum($("#hxGo").value);if(n===null)return alert("Enter an offset like 0x1000 or 4096.");HX.sel={a:n,b:n};HX.bytes=null;HX.offset=n-n%16;renderHex()});
+  on("hxFindB",hexFind);
+  on("bHxHdr",()=>{const sb=selBytes();if(!sb)return alert("Select the header bytes first.");if(sb.len<2||sb.len>32)return alert("A header is 2 to 32 bytes.");
+    HX.anchor=sb.a;HX.hdrLen=sb.len;HX.hdrBytes=[...sb.bytes].map(h2).join(" ");HX.len=null;renderHex()});
+  on("bHxLen",()=>{const sb=selBytes();if(HX.anchor===null)return alert("Set the header first.");if(!sb||![1,2,4,8].includes(sb.len))return alert("Select 1, 2, 4 or 8 bytes holding the size.");
+    if(sb.a<HX.anchor)return alert("The length field must come after the header start.");HX.len={offset:sb.a-HX.anchor,size:sb.len};renderHex()});
+  on("bHxFoot",()=>{const sb=selBytes();if(!sb||sb.len<2||sb.len>32)return alert("Select 2 to 32 footer bytes.");HX.foot={at:sb.a,len:sb.len,hex:[...sb.bytes].map(h2).join(" ")};renderHex()});
+  on("bHxFollow",async()=>{if(!HX.len)return alert("Mark a length field first.");
+    const r=await api("/api/hex",{target:HX.target,path:HX.path,offset:HX.anchor+HX.len.offset,length:HX.len.size});
+    const b=new Uint8Array(r.hex.match(/../g).map(x=>parseInt(x,16)));const v=Number(uint(b,HX.endian==="little"));
+    const nxt=HX.anchor+v+HX.adj;if(!(v>0)||nxt>=HX.size)return alert(`The length (${v.toLocaleString()}) points past the end of the source.`);
+    const hdr=await api("/api/hex",{target:HX.target,path:HX.path,offset:nxt,length:HX.hdrLen});
+    const same=hdr.hex.toUpperCase()===HX.hdrBytes.replace(/ /g,"");
+    HX.anchor=nxt;HX.sel={a:nxt,b:nxt+HX.hdrLen-1};HX.bytes=null;HX.offset=nxt-nxt%16;await hexLoad(HX.offset);
+    toast(same?`Length field checks out: the next header is at ${hx(nxt)}`:`Jumped to ${hx(nxt)}, but the bytes there are NOT the header - check the offset, byte order or adjust`,same?"ok":"bad")});
+  on("bHxEdit",hexToEditor);
+  on("bHxSample",()=>{const sb=selBytes();if(!sb)return alert("Select where the sample starts.");
+    let n=sb.len;if(n<64){const v=prompt("Sample length in bytes (from the selected byte). Tip: use Follow Length / Find to locate the end.","1048576");if(v===null)return;n=parseNum(v);if(!n||n<16)return alert("Enter a length of at least 16 bytes.")}
+    if(HX.target!=="evidence"&&!HX.path)return;
+    LRN.samples.push(HX.target==="evidence"?{kind:"evidence",offset:sb.a,length:n,name:`evidence@${hx(sb.a)}`}:{kind:"file",path:HX.path,name:HX.path.split(/[\/]/).pop()});
+    toast(`Added sample ${LRN.samples.length} to the learner (Signatures > Learn from Samples)`,"ok")});
+  on("bLearn",()=>{LRN.open=!LRN.open;content()});
+  on("bViewHex",()=>{if(!SELITEM)return alert("Click an item in the Items table first.");
+    const run=RUNS.find(r=>r.name===SELRUN);if(run&&run.source&&S.source&&run.source!==S.source.path)return alert(`This run was carved from ${run.source}. Select that evidence on the Home tab first.`);
+    const a=Number(SELITEM.start);hexOpen("evidence","",a,{a,b:a+Math.min(Number(SELITEM.length),65536)});HX.sel={a,b:a}});
   on("bReport",()=>{if(!SELRUN)return alert("Select a run.");window.open("/runs/"+encodeURIComponent(SELRUN)+"/report.html","_blank")});
   on("bRebuild",async()=>{if(!SELRUN)return alert("Select a run.");try{await api("/api/report",{run:SELRUN});window.open("/runs/"+encodeURIComponent(SELRUN)+"/report.html","_blank")}catch(e){alert(e.message)}});
   on("bOpenRun",()=>{if(!SELRUN)return alert("Select a run.");api("/api/open",{run:SELRUN}).catch(e=>alert(e.message))});
@@ -651,6 +728,159 @@ function dvrDialog(d,withOffset){
      try{const m=withOffset?captureMeasurement():null;const r=await api("/api/dvrs",{id:d.id,name:$("#dN").value,location:$("#dL").value,make:$("#dMk").value,model:$("#dMo").value,serial:$("#dS").value,channels:$("#dC").value,dst_setting:$("#dDst").value,notes:$("#dNo").value});
        if(m){m.dvr_id=r.id;await api("/api/dvrs/measure",m)}
        CK.sel=r.id;closeModal();await loadDvrs();renderClock()}catch(e){$("#dErr").textContent=e.message}},"amber"]]);
+}
+
+
+let toastT=null;
+function toast(msg,kind){const t=$("#toast");t.textContent=msg;t.className="toast show "+(kind||"");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),7000)}
+
+/* ---------------- native Open dialog (falls back to the built-in browser) ---------------- */
+let NATIVE_OK=true;
+async function pickNative(mode,title){
+  if(!NATIVE_OK)return null;
+  try{const r=await api("/api/pick",{mode,title});
+    if(r.error){NATIVE_OK=false;return null}
+    return r.paths}catch(e){NATIVE_OK=false;return null}
+}
+async function pickFileAny(title,cb){const p=await pickNative("file",title);if(p===null)return pickFile(title,cb);if(p.length)cb(p[0])}
+async function pickFolderAny(title,cb){const p=await pickNative("folder",title);if(p===null)return browser(title,false,cb);if(p.length)cb(p[0])}
+
+/* ---------------- hex viewer (read-only) ---------------- */
+const HX={target:"evidence",path:"",offset:0,page:1024,bytes:null,size:0,sel:null,anchor:null,hdrLen:0,
+  len:null,endian:"little",adj:0,foot:null,frames:true,hl:null};
+const h2=n=>n.toString(16).toUpperCase().padStart(2,"0");
+const hx=n=>"0x"+n.toString(16).toUpperCase();
+function parseNum(v){v=String(v||"").trim().replace(/,/g,"");if(!v)return null;const n=v.toLowerCase().startsWith("0x")?parseInt(v,16):Number(v);return isFinite(n)?n:null}
+async function hexLoad(off){
+  try{const r=await api("/api/hex",{target:HX.target,path:HX.path,offset:Math.max(0,off),length:HX.page});
+    HX.offset=r.offset;HX.size=r.size;HX.bytes=new Uint8Array(r.hex.match(/../g)?.map(x=>parseInt(x,16))||[]);HX.label=r.path;
+    renderHex()}catch(e){$("#content").innerHTML=`<div class="card"><h2>Hex viewer</h2><div class="err">${esc(e.message)}</div><p class="muted">Select evidence on the Home tab, or use <b>Open File</b>.</p></div>`}
+}
+function selBytes(){if(!HX.sel||!HX.bytes)return null;const a=Math.min(HX.sel.a,HX.sel.b),b=Math.max(HX.sel.a,HX.sel.b);
+  const ra=a-HX.offset,rb=b-HX.offset;if(ra<0||rb>=HX.bytes.length)return null;return {a,b,len:b-a+1,bytes:HX.bytes.slice(ra,rb+1)}}
+function uint(bytes,le){let v=0n;const arr=le?[...bytes].reverse():[...bytes];for(const x of arr)v=(v<<8n)+BigInt(x);return v}
+function interp(bytes){
+  const rows=[];const n=bytes.length;
+  if([1,2,4,8].includes(n)){
+    rows.push(["unsigned LE",uint(bytes,true).toLocaleString()],["unsigned BE",uint(bytes,false).toLocaleString()]);
+    if(n===4){
+      const le=Number(uint(bytes,true)),be=Number(uint(bytes,false));
+      const ut=v=>{const d=new Date(v*1000);return v>946684800&&v<2208988800?d.toISOString().replace("T"," ").slice(0,19)+" UTC":"—"};
+      const dp=v=>{const s=v&63,mi=(v>>>6)&63,h=(v>>>12)&31,d=(v>>>17)&31,mo=(v>>>22)&15,y=(v>>>26)+2000;
+        return (mo>=1&&mo<=12&&d>=1&&d<=31&&h<24&&mi<60&&s<60)?`${y}-${p2(mo)}-${p2(d)} ${p2(h)}:${p2(mi)}:${p2(s)}`:"—"};
+      rows.push(["Unix time LE",ut(le)],["Unix time BE",ut(be)],["Dahua packed LE",dp(le)],["Dahua packed BE",dp(be)]);
+    }
+    if(n===8){const ft=uint(bytes,true);const ms=Number(ft/10000n)-11644473600000;rows.push(["FILETIME LE",ms>946684800000&&ms<4102444800000?new Date(ms).toISOString().replace("T"," ").slice(0,19)+" UTC":"—"])}
+  }
+  rows.push(["ASCII",[...bytes].map(b=>b>=32&&b<127?String.fromCharCode(b):".").join("")]);
+  return rows;
+}
+function hexClass(o){
+  const c=[];
+  if(HX.anchor!==null&&o>=HX.anchor&&o<HX.anchor+HX.hdrLen)c.push("hxhdr");
+  if(HX.len&&HX.anchor!==null&&o>=HX.anchor+HX.len.offset&&o<HX.anchor+HX.len.offset+HX.len.size)c.push("hxlen");
+  if(HX.foot&&o>=HX.foot.at&&o<HX.foot.at+HX.foot.len)c.push("hxfoot");
+  if(HX.hl&&o>=HX.hl.a&&o<HX.hl.b)c.push("hxhl");
+  if(HX.sel){const a=Math.min(HX.sel.a,HX.sel.b),b=Math.max(HX.sel.a,HX.sel.b);if(o>=a&&o<=b)c.push("hxsel")}
+  return c.join(" ");
+}
+function renderHex(){
+  const C=$("#content");
+  if(!HX.bytes){hexLoad(HX.offset);C.innerHTML=`<div class="card"><p class="muted">Loading&hellip;</p></div>`;return}
+  let rows="";
+  for(let r=0;r<HX.bytes.length;r+=16){
+    const off=HX.offset+r;let hb="",as="";
+    for(let i=0;i<16;i++){const k=r+i;if(k>=HX.bytes.length){hb+=`<span> </span>`;as+=`<span> </span>`;continue}
+      const b=HX.bytes[k],o=off+i,cl=hexClass(o);
+      hb+=`<span data-o="${o}" class="${cl}">${h2(b)}</span>`;as+=`<span data-o="${o}" class="${cl}">${b>=32&&b<127?esc(String.fromCharCode(b)):"."}</span>`}
+    rows+=`<div class="hxrow"><span class="hxoff">${off.toString(16).toUpperCase().padStart(10,"0")}</span><span class="hxbytes">${hb}</span><span class="hxasc">${as}</span></div>`;
+  }
+  const sb=selBytes();
+  const lenInfo=HX.len&&HX.anchor!==null?(()=>{const ra=HX.anchor+HX.len.offset-HX.offset;
+      if(ra<0||ra+HX.len.size>HX.bytes.length)return `<div>Length value</div><div class="muted">not on this page</div>`;
+      const v=Number(uint(HX.bytes.slice(ra,ra+HX.len.size),HX.endian==="little"));
+      return `<div>Length value</div><div>${v.toLocaleString()} &rarr; next at ${hx(HX.anchor+v+HX.adj)}</div>`})():"";
+  C.innerHTML=`<div class="hx"><div class="card"><h2 style="display:flex;gap:10px;align-items:baseline">Hex &mdash; read-only <span class="muted mono" style="font-size:12px;font-weight:400">${esc(HX.label||"")} &middot; ${fmt(HX.size)} &middot; ${hx(HX.offset)}&ndash;${hx(HX.offset+HX.bytes.length-1)}</span></h2>
+     <div class="hxgrid" id="hxgrid">${rows||'<span class="muted">End of source</span>'}</div>
+     <div class="legend muted" style="margin-top:6px"><span class="hxsel">selection</span><span class="hxhdr">header</span><span class="hxlen">length field</span><span class="hxfoot">footer</span><span class="hxhl">item</span> Click a byte; Shift+click to extend.</div></div>
+   <div><div class="card"><h2>Selection</h2>${sb?`<div class="kvs"><div>Offset</div><div class="mono">${hx(sb.a)} (${sb.a.toLocaleString()})</div><div>Length</div><div>${sb.len.toLocaleString()} byte(s)</div>
+      ${HX.anchor!==null?`<div>From header</div><div>+${(sb.a-HX.anchor).toLocaleString()}</div>`:""}
+      ${sb.len<=64?`<div>Hex</div><div class="mono">${[...sb.bytes].map(h2).join(" ")}</div>`:""}
+      ${interp(sb.len<=64?sb.bytes:sb.bytes.slice(0,64)).map(([k,v])=>`<div>${k}</div><div class="mono">${esc(v)}</div>`).join("")}</div>`:'<p class="muted">Nothing selected.</p>'}</div>
+    <div class="card" style="margin-top:12px"><h2>Signature being built</h2><div class="kvs">
+      <div>Header</div><div class="mono">${HX.anchor!==null?esc(headerHex())+` @ ${hx(HX.anchor)}`:"&mdash;"}</div>
+      <div>Length field</div><div>${HX.len?`offset ${HX.len.offset}, ${HX.len.size} B, <select id="hxEnd"><option ${HX.endian==="little"?"selected":""}>little</option><option ${HX.endian==="big"?"selected":""}>big</option></select> adjust <input id="hxAdj" type="number" value="${HX.adj}" style="width:64px">`:"&mdash;"}</div>
+      ${lenInfo}
+      <div>Footer</div><div class="mono">${HX.foot?esc(HX.foot.hex):"&mdash;"}</div>
+      <div>Item is</div><div><label><input type="checkbox" id="hxFrames" ${HX.frames?"checked":""}> a stream of frames</label></div></div>
+      <p class="muted" style="margin:8px 0 0">Select the first bytes of a frame or file &rarr; <b>Use as Header</b>. Select its size bytes &rarr; <b>Length Field</b>, then <b>Follow Length</b> to check it lands on the next header.</p></div></div></div>`;
+  const grid=$("#hxgrid");
+  grid.querySelectorAll("[data-o]").forEach(el=>el.onclick=e=>{const o=Number(el.dataset.o);
+    HX.sel=e.shiftKey&&HX.sel?{a:HX.sel.a,b:o}:{a:o,b:o};const st=grid.scrollTop;renderHex();$("#hxgrid").scrollTop=st});
+  if($("#hxEnd"))$("#hxEnd").onchange=e=>{HX.endian=e.target.value;renderHex()};
+  if($("#hxAdj"))$("#hxAdj").onchange=e=>{HX.adj=Number(e.target.value)||0;renderHex()};
+  $("#hxFrames").onchange=e=>HX.frames=e.target.checked;
+}
+function headerHex(){if(HX.anchor===null)return "";const ra=HX.anchor-HX.offset;
+  return HX.hdrBytes?HX.hdrBytes:(ra>=0?[...HX.bytes.slice(ra,ra+HX.hdrLen)].map(h2).join(" "):"")}
+function hexOpen(target,path,offset,hl){HX.target=target;HX.path=path||"";HX.bytes=null;HX.sel=null;HX.hl=hl||null;HX.offset=Math.max(0,(offset||0)-(offset||0)%16);setTab("hex")}
+async function hexFind(){
+  const q=$("#hxQ").value.trim();if(!q)return;
+  const from=(HX.sel?Math.min(HX.sel.a,HX.sel.b):HX.offset-1)+1;
+  toast("Searching…");
+  try{const r=await api("/api/hex/find",{target:HX.target,path:HX.path,offset:from,query:q,mode:$("#hxQm").value});
+    if(r.found===null){alert(r.end_of_source?"Not found before the end of the source.":`Not found in the next ${fmt(r.scanned)}. Press Find next to keep searching from ${hx(r.stopped_at)}.`);
+      if(!r.end_of_source){HX.sel={a:r.stopped_at-1,b:r.stopped_at-1}}return}
+    const qlen=$("#hxQm").value==="text"?new TextEncoder().encode(q).length:(q.includes(" ")?q.split(/\s+/).length:q.length/2);
+    HX.sel={a:r.found,b:r.found+qlen-1};HX.bytes=null;HX.offset=r.found-r.found%16;renderHex()}
+  catch(e){alert(e.message)}finally{if(HX.sel)$("#toast").classList.remove("show")}
+}
+function hexToEditor(){
+  if(HX.anchor===null)return alert("Set a header first: select the first bytes of a frame or file, then Use as Header.");
+  const sig={id:"",name:"",extension:"bin",header:headerHex(),header_offset:0,footer:"",footer_tail:0,footer_search:"first",on_missing_footer:"skip",
+    min_size:16,max_size:104857600,enabled:true,validated:false,origin:"user",_editing:1,
+    notes:`Built in the hex viewer from ${HX.label||"evidence"} at ${hx(HX.anchor)}. NOT VALIDATED.`};
+  if(HX.len){sig.mode=HX.frames?"frame_chain":"header_length";sig.length_field={offset:HX.len.offset,size:HX.len.size,endian:HX.endian,adjust:HX.adj,multiplier:1};
+    if(HX.frames){sig.chain_max_gap=0;sig.max_size=4294967296}}
+  else if(HX.foot)sig.mode="header_footer";else sig.mode="header_maxsize";
+  if(HX.foot)sig.footer=HX.foot.hex;
+  EDIT=sig;setTab("sigs");
+}
+
+/* ---------------- learner ---------------- */
+const LRN={open:false,samples:[],result:null,busy:false};
+function learnerCard(){
+  const r=LRN.result;
+  return `<div class="card"><h2>Learn from samples</h2>
+   <p class="muted">Add 3 or more known-good samples of one format: exports from the same recorder, or byte ranges from the Hex tab (<b>Add as Sample</b>). Samples from different channels help find the channel field.</p>
+   <table><tr><th>Sample</th><th>From</th><th>Size</th><th></th></tr>
+   ${LRN.samples.map((x,i)=>`<tr><td>${esc(x.name)}</td><td class="mono" style="font-size:11px">${esc(x.kind==="evidence"?`evidence @ ${hx(x.offset)}`:x.path)}</td><td>${x.length?fmt(x.length):""}</td><td><button class="btn" data-rm="${i}">Remove</button></td></tr>`).join("")||'<tr><td colspan=4 class="muted">No samples yet</td></tr>'}</table>
+   <div class="row" style="margin-top:8px"><button class="btn" id="lAdd">Add Files&hellip;</button>
+     <input id="lId" placeholder="Signature ID (optional)" style="width:180px"><input id="lName" placeholder="Name (optional)" style="width:220px">
+     <button class="btn amber" id="lRun" ${LRN.busy?"disabled":""}>${LRN.busy?"Learning…":"Run Learner"}</button><button class="btn" id="lClose">Close</button></div>
+   ${r?`<h2 style="margin-top:14px">Findings</h2><table><tr><th>What</th><th>Value</th><th>Evidence</th></tr>
+      ${r.findings.map(f=>`<tr><td>${esc(f.what)}</td><td class="mono">${esc(f.value)}</td><td>${esc(f.evidence)}</td></tr>`).join("")}</table>
+      ${r.warnings.map(w=>`<div class="notes"><div>${esc(w)}</div></div>`).join("")}
+      <h2 style="margin-top:14px">Self-test ${r.self_test.passed?'<span class="pill ok">passed</span>':'<span class="pill no">failed</span>'}</h2>
+      <p class="muted">Each sample was planted in random data and carved back with the draft signature.${r.self_test.extra_hits?` ${r.self_test.extra_hits} extra hit(s) in the random data.`:""}</p>
+      <table><tr><th>Sample</th><th>Planted at</th><th>Length</th><th>Carved length</th><th>Result</th></tr>
+      ${(r.self_test.results||[]).map(t=>`<tr><td>${esc(t.sample)}</td><td class="mono">${hx(t.offset)}</td><td>${t.length.toLocaleString()}</td><td>${t.found?t.carved_length.toLocaleString():"not found"}</td><td>${t.ok?'<span class="pill ok">exact</span>':'<span class="pill no">wrong</span>'}</td></tr>`).join("")}</table>
+      <h2 style="margin-top:14px">Draft signature <span class="pill no">not validated</span></h2>
+      <pre class="mono" style="font-size:11.5px;background:#f6f7f9;padding:8px;overflow:auto">${esc(JSON.stringify(r.signature,null,2))}</pre>
+      <button class="btn amber" id="lEdit">Open in Editor</button>`:""}
+   <div class="err" id="lErr"></div></div>`;
+}
+function wireLearner(){
+  document.querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{LRN.samples.splice(Number(b.dataset.rm),1);content()});
+  $("#lAdd").onclick=async()=>{const p=await pickNative("files","Choose sample files");
+    if(p===null)return pickFile("Add a sample file",x=>{LRN.samples.push({kind:"file",path:x,name:x.split(/[\\/]/).pop()});content()});
+    p.forEach(x=>LRN.samples.push({kind:"file",path:x,name:x.split(/[\\/]/).pop()}));content()};
+  $("#lClose").onclick=()=>{LRN.open=false;content()};
+  $("#lRun").onclick=async()=>{if(!LRN.samples.length)return alert("Add samples first.");LRN.busy=true;content();
+    try{LRN.result=await api("/api/learn",{samples:LRN.samples,id:$("#lId")?$("#lId").value:"",name:$("#lName")?$("#lName").value:""})}
+    catch(e){LRN.result=null;setTimeout(()=>{if($("#lErr"))$("#lErr").textContent=e.message},0)}
+    LRN.busy=false;content()};
+  if($("#lEdit"))$("#lEdit").onclick=()=>{EDIT={...LRN.result.signature,origin:"user",_editing:1};LRN.open=false;content()};
 }
 
 /* ---------------- state polling ---------------- */

@@ -7,4 +7,5 @@ python -m PyInstaller --noconfirm --onefile --name DFX --console ^
   --add-data "dfx\web;dfx\web" --add-data "dfx\carve\signatures;dfx\carve\signatures" ^
   --add-data "dfx\vendor;dfx\vendor" ^
   --paths "dfx\vendor" --hidden-import ewfprobe --hidden-import mediacarve ^
+  --hidden-import tkinter --hidden-import tkinter.filedialog ^
   --add-data "VERSION;." dfx_launcher.py
