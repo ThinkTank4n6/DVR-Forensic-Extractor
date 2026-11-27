@@ -118,7 +118,8 @@ def main(argv=None):
 
     if a.cmd == "doctor":
         import platform
-        print(f"{APP_NAME} {__version__}")
+        from . import version_label
+        print(f"{APP_NAME} {version_label()}")
         print(f"Python  {platform.python_version()} ({platform.system()} {platform.release()})")
         ok = sys.version_info >= (3, 11)
         print(f"  Python 3.11+ ............ {'OK' if ok else 'TOO OLD'}")

@@ -12,6 +12,32 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # all tags, to check the new version is higher than every published one
+      - name: Check tag and decide release kind
+        id: kind
+        shell: pwsh
+        run: |
+          # v2026.11.1.12 = pre-release build (4 parts); v2026.11.2 = official release (3 parts)
+          $tag = "${{ github.ref_name }}"
+          $ver = (Get-Content VERSION -Raw).Trim()
+          if ($tag -notmatch '^v\d{4}\.\d{1,2}\.\d+(\.\d+)?$') { Write-Error "Tag $tag is not vYYYY.M.R or vYYYY.M.R.B"; exit 1 }
+          if ($tag.Substring(1) -ne $ver) { Write-Error "Tag $tag does not match VERSION file ($ver)"; exit 1 }
+          # every new version must sort above every version already tagged ([version] compares part by part;
+          # a missing 4th part sorts first, so 2026.11.1 < 2026.11.1.12 < 2026.11.2 < 2026.12.1)
+          $new = [version]$ver
+          $older = git tag --list 'v*' | Where-Object { $_ -ne $tag -and $_ -match '^v\d{4}\.\d{1,2}\.\d+(\.\d+)?$' } |
+                   ForEach-Object { [version]$_.Substring(1) }
+          $top = $older | Sort-Object -Descending | Select-Object -First 1
+          if ($top -and $new -le $top) { Write-Error "Version $ver must be higher than the highest existing tag v$top"; exit 1 }
+          $pre = ($ver.Split('.').Count -eq 4)
+          "prerelease=$($pre.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          "latest=$((-not $pre).ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          if ($pre) {
+            "body=Pre-release build. Early development - NOT yet tested on real DVR evidence. Do not use for casework. See README and CHANGELOG." >> $env:GITHUB_OUTPUT
+          } else {
+            "body=Official release. See CHANGELOG for what changed and README for validation status." >> $env:GITHUB_OUTPUT
+          }
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -31,8 +57,9 @@ jobs:
           (Get-FileHash "DFX-$v-windows.zip" -Algorithm SHA256).Hash.ToLower() + "  DFX-$v-windows.zip" | Out-File -Encoding ascii "DFX-$v-windows.zip.sha256"
       - uses: softprops/action-gh-release@v2
         with:
-          prerelease: true
-          body: "Early development build - NOT yet tested on real DVR evidence. Do not use for casework. See README."
+          prerelease: ${{ steps.kind.outputs.prerelease }}
+          make_latest: ${{ steps.kind.outputs.latest }}
+          body: ${{ steps.kind.outputs.body }}
           files: |
             DFX-*-windows.zip
             DFX-*-windows.zip.sha256

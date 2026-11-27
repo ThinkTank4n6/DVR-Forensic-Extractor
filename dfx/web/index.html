@@ -253,7 +253,7 @@ function ribbon(){
   if(TAB==="sigs") R.innerHTML=
     grp("Library",rb("bSigNew","add","New",1)+rb("bSigEdit","edit","Edit / Copy")+rb("bSigDel","del","Delete"))+
     grp("Exchange",rb("bSigImp","imp","Import JSON")+rb("bSigExp","exp","Export JSON"))+
-    grp("Check",rb("bSigTest","test","Test on File",1))+
+    grp("Check",rb("bSigTest","test","Test on File",1)+rb("bValidate","sig","Validate"))+
     grp("Learn",rb("bLearn","learn","Learn from Samples",1));
   if(TAB==="results") R.innerHTML=
     grp("Runs",rb("bRefresh","refresh","Refresh"))+
@@ -293,14 +293,15 @@ function content(){
      </table><p class="muted">Unvalidated signatures are flagged in the report. Dahua DHAV is off by default until you validate it.</p></div>`;
   }
   if(TAB==="sigs"){
-    C.innerHTML=(LRN.open?learnerCard():"")+`<div class="card"><h2>Signature library</h2>
+    C.innerHTML=(VAL.open?validateCard():"")+(LRN.open?learnerCard():"")+`<div class="card"><h2>Signature library</h2>
      <table id="sigTable"><tr><th>Name</th><th>ID</th><th>Mode</th><th>Header</th><th>Footer</th><th>Max size</th><th>Validated</th><th>Source</th></tr>
      ${SIGS.map(s=>`<tr class="click ${EDIT&&EDIT.id===s.id?'sel':''}" data-id="${esc(s.id)}"><td>${esc(s.name)}</td><td class="mono">${esc(s.id)}</td><td>${esc(s.mode)}</td>
        <td class="mono">${esc(s.header)}</td><td class="mono">${esc(s.footer)}</td><td>${fmt(s.max_size)}</td>
-       <td>${s.validated?'<span class="pill ok">Yes</span>':'<span class="pill no">No</span>'}</td><td><span class="pill n">${esc(s.origin)}</span></td></tr>`).join("")}
+       <td>${s.validated?(s.validation?`<span class="pill ok" title="${esc(s.validation.date)} with DFX ${esc(s.validation.dfx_version)}">Yes${s.validation.dfx_version!==S.version?" (older DFX)":""}</span>`:'<span class="pill ok" title="marked by the examiner; no DFX validation record">Yes*</span>'):'<span class="pill no">No</span>'}</td><td><span class="pill n">${esc(s.origin)}</span></td></tr>`).join("")}
      </table></div><div id="sigEditor"></div>`;
     C.querySelectorAll("#sigTable tr[data-id]").forEach(tr=>tr.onclick=()=>{EDIT=SIGS.find(s=>s.id===tr.dataset.id);content();});
     if(LRN.open)wireLearner();
+    if(VAL.open)wireValidate();
     if(EDIT&&EDIT._editing) editor();
     else if(EDIT) $("#sigEditor").innerHTML=`<div class="card"><h2>${esc(EDIT.name)}</h2><pre class="mono" style="font-size:11.5px">${esc(JSON.stringify(strip(EDIT),null,2))}</pre></div>`;
   }
@@ -543,6 +544,7 @@ function wire(){
     LRN.samples.push(HX.target==="evidence"?{kind:"evidence",offset:sb.a,length:n,name:`evidence@${hx(sb.a)}`}:{kind:"file",path:HX.path,name:HX.path.split(/[\/]/).pop()});
     toast(`Added sample ${LRN.samples.length} to the learner (Signatures > Learn from Samples)`,"ok")});
   on("bLearn",()=>{LRN.open=!LRN.open;content()});
+  on("bValidate",async()=>{VAL.open=!VAL.open;if(VAL.open){if(!VAL.sigId&&EDIT)VAL.sigId=EDIT.id;await loadValidations()}content()});
   on("bViewHex",()=>{if(!SELITEM)return alert("Click an item in the Items table first.");
     const run=RUNS.find(r=>r.name===SELRUN);if(run&&run.source&&S.source&&run.source!==S.source.path)return alert(`This run was carved from ${run.source}. Select that evidence on the Home tab first.`);
     const a=Number(SELITEM.start);hexOpen("evidence","",a,{a,b:a+Math.min(Number(SELITEM.length),65536)});HX.sel={a,b:a}});
@@ -550,7 +552,7 @@ function wire(){
   on("bRebuild",async()=>{if(!SELRUN)return alert("Select a run.");try{await api("/api/report",{run:SELRUN});window.open("/runs/"+encodeURIComponent(SELRUN)+"/report.html","_blank")}catch(e){alert(e.message)}});
   on("bOpenRun",()=>{if(!SELRUN)return alert("Select a run.");api("/api/open",{run:SELRUN}).catch(e=>alert(e.message))});
   on("bManual",()=>window.open("/manual","_blank"));
-  on("bAbout",()=>modal("About",`<p><b>DVR Forensic Extractor</b> ${esc(S.version)}</p><p>Copyright (c) 2026 Christopher A. Tankelewicz (ThinkTank4n6). MIT License.</p><p><b>Early development build &mdash; not yet tested on real DVR evidence. Do not use for casework.</b></p><p class="muted">Provided without warranty. Validate every signature and every release against known test data before relying on results.</p>`,[["Close",closeModal,"amber"]]));
+  on("bAbout",()=>modal("About",`<p><b>DVR Forensic Extractor</b> ${esc(S.version_label||S.version)}</p><p class="muted">Versions: <b>Year.Month.Release.Build</b> is a pre-release build (e.g. 2026.11.1.12); <b>Year.Month.Release</b> is an official release, numbered by the month it is published (e.g. 2026.12.1).</p><p>Copyright (c) 2026 Christopher A. Tankelewicz (ThinkTank4n6). MIT License.</p><p><b>Early development build &mdash; not yet tested on real DVR evidence. Do not use for casework.</b></p><p class="muted">Provided without warranty. Validate every signature and every release against known test data before relying on results.</p>`,[["Close",closeModal,"amber"]]));
 }
 function parseOff(v){v=(v||"").trim();if(!v)return 0;return v.toLowerCase().startsWith("0x")?parseInt(v,16):Number(v.replace(/,/g,""))}
 async function setTab(t){if(t==="clock"||t==="carve"){await loadDvrs();if(t==="clock")await loadTimeStatus()}TAB=t;document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===t));ribbon();content()}
@@ -860,8 +862,8 @@ function learnerCard(){
      <button class="btn amber" id="lRun" ${LRN.busy?"disabled":""}>${LRN.busy?"Learning…":"Run Learner"}</button><button class="btn" id="lClose">Close</button></div>
    ${r?`<h2 style="margin-top:14px">Findings</h2><table><tr><th>What</th><th>Value</th><th>Evidence</th></tr>
       ${r.findings.map(f=>`<tr><td>${esc(f.what)}</td><td class="mono">${esc(f.value)}</td><td>${esc(f.evidence)}</td></tr>`).join("")}</table>
-      ${r.warnings.map(w=>`<div class="notes"><div>${esc(w)}</div></div>`).join("")}
-      ${r.recognized?`<div class="card" style="border-left:4px solid #2e7d4f;background:#e3f3ea;margin-top:10px"><b>Standard ${esc(r.recognized.kind.toUpperCase())} files.</b> The built-in signature <b>${esc(r.recognized.builtin||"")}</b> already recovers these with exact lengths. A learned signature isn't needed.</div>`:""}
+      ${r.warnings.filter(w=>!(r.recognized&&w.startsWith("These are standard"))).map(w=>`<div class="notes"><div>${esc(w)}</div></div>`).join("")}
+      ${r.recognized?`<div class="card" style="border-left:4px solid #2e7d4f;background:#e3f3ea;margin-top:10px"><b>Standard ${esc(r.recognized.kind.toUpperCase())} files.</b> The built-in signature <b>${esc(r.recognized.builtin||"")}</b> already recovers these with exact lengths (${r.recognized.kind==="asf"?"DFX's ASF object walk":"mediacarve"}). A learned signature isn't needed &mdash; use <b>Validate</b> on <b>${esc(r.recognized.builtin||"")}</b> with these files instead.</div>`:""}
       <h2 style="margin-top:14px">Self-test ${r.self_test.passed?(r.self_test.estimated?'<span class="pill ok">found (lengths estimated)</span>':'<span class="pill ok">passed</span>'):'<span class="pill no">failed</span>'}</h2>
       <p class="muted">Each sample was planted in random data and carved back with the draft signature.${r.self_test.extra_hits?` ${r.self_test.extra_hits} extra hit(s) in the random data.`:""}</p>
       <table><tr><th>Sample</th><th>Planted at</th><th>Length</th><th>Carved length</th><th>Result</th></tr>
@@ -884,10 +886,54 @@ function wireLearner(){
   if($("#lEdit"))$("#lEdit").onclick=()=>{EDIT={...LRN.result.signature,origin:"user",_editing:1};LRN.open=false;content()};
 }
 
+
+/* ---------------- validation ---------------- */
+const VAL={open:false,sigId:"",known:[],test:"",neg:"",allow:false,list:[]};
+async function loadValidations(){try{VAL.list=await api("/api/validations")}catch(e){VAL.list=[]}}
+function validateCard(){
+  const running=S.job&&S.job.running&&S.job.type==="validate";
+  return `<div class="card"><h2>Validate a signature</h2>
+   <p class="muted">Prove a signature on data whose contents you know. Copy the <b>known files</b> (originals, e.g. recorder exports) onto a wiped drive, delete some, and image it: that's the <b>test image</b>. DFX hashes everything, carves the test image with only this signature, and passes it only if every known file comes back <b>byte-for-byte</b>, with no unexpected items and nothing found in the optional <b>negative image</b> (media with none of these files).</p>
+   <div class="form">
+    <label>Signature</label><select id="vSig">${SIGS.filter(x=>!(x.problems||[]).length).map(x=>`<option value="${esc(x.id)}" ${x.id===VAL.sigId?"selected":""}>${esc(x.name)} (${esc(x.id)})</option>`).join("")}</select>
+    <label>Known files</label><div>${VAL.known.map((k,i)=>`<div class="row"><span class="mono" style="font-size:12px;flex:1">${esc(k)}</span><button class="btn" data-vrm="${i}">Remove</button></div>`).join("")||'<span class="muted">none yet</span>'}
+      <div class="row"><button class="btn" id="vAdd">Add Files&hellip;</button></div></div>
+    <label>Test image</label><div class="row"><input id="vTest" style="flex:1" value="${esc(VAL.test)}" placeholder="E01, dd, .001 ..."><button class="btn" id="vTestB">Choose&hellip;</button></div>
+    <label>Negative image</label><div class="row"><input id="vNeg" style="flex:1" value="${esc(VAL.neg)}" placeholder="optional: media with none of these files"><button class="btn" id="vNegB">Choose&hellip;</button></div>
+    <label>Other files</label><div><label><input type="checkbox" id="vAllow" ${VAL.allow?"checked":""} style="width:auto"> the test image may also hold other files of this type (they are listed, not failed)</label></div>
+   </div>
+   <div class="row" style="margin-top:10px"><button class="btn amber" id="vRun" ${running?"disabled":""}>${running?"Validating…":"Run Validation"}</button><button class="btn" id="vClose">Close</button></div>
+   <h2 style="margin-top:14px">Validation records (this case)</h2>
+   <table><tr><th>Signature</th><th>Finished</th><th>Result</th><th>Known files</th><th>Unexpected</th><th>Negative</th><th></th></tr>
+   ${VAL.list.map(v=>`<tr><td class="mono">${esc(v.signature_id)}</td><td>${esc(v.finished)}</td>
+     <td>${v.verdict==="PASS"?'<span class="pill ok">PASS</span>':`<span class="pill no" title="${esc(v.failures.join("; "))}">FAIL</span>`}</td>
+     <td>${v.recovered} of ${v.known}</td><td>${v.unexpected}</td><td>${v.negative===null||v.negative===undefined?"&mdash;":v.negative}</td>
+     <td><button class="btn" data-vrep="${esc(v.name)}">Report</button> ${v.verdict!=="PASS"?"":(()=>{const sg=SIGS.find(x=>x.id===v.signature_id);
+       return sg&&sg.validated&&sg.validation&&String(sg.validation.report).includes(v.name)?'<span class="pill ok">marked validated</span>':`<button class="btn amber" data-vmark="${esc(v.name)}">Mark Validated</button>`})()}</td></tr>`).join("")||'<tr><td colspan=7 class="muted">None yet</td></tr>'}</table>
+   <div class="err" id="vErr"></div></div>`;
+}
+function wireValidate(){
+  const keep=()=>{VAL.sigId=$("#vSig").value;VAL.test=$("#vTest").value.trim();VAL.neg=$("#vNeg").value.trim();VAL.allow=$("#vAllow").checked};
+  document.querySelectorAll("[data-vrm]").forEach(b=>b.onclick=()=>{keep();VAL.known.splice(Number(b.dataset.vrm),1);content()});
+  $("#vAdd").onclick=async()=>{keep();const p=await pickNative("files","Choose the known files (originals)");
+    if(p===null)return pickFile("Add a known file",x=>{VAL.known.push(x);content()});p.forEach(x=>VAL.known.includes(x)||VAL.known.push(x));content()};
+  $("#vTestB").onclick=()=>{keep();pickFileAny("Choose the test image",p=>{VAL.test=p;content()})};
+  $("#vNegB").onclick=()=>{keep();pickFileAny("Choose the negative image",p=>{VAL.neg=p;content()})};
+  $("#vClose").onclick=()=>{keep();VAL.open=false;content()};
+  $("#vRun").onclick=async()=>{keep();
+    try{await api("/api/validate",{signature_id:VAL.sigId,known_files:VAL.known,test_image:VAL.test,negative_image:VAL.neg,allow_other:VAL.allow});
+      toast("Validation started - progress is in the status bar","ok");setTimeout(content,300)}catch(e){$("#vErr").textContent=e.message}};
+  document.querySelectorAll("[data-vrep]").forEach(b=>b.onclick=()=>window.open("/validation/"+encodeURIComponent(b.dataset.vrep)+"/report.html","_blank"));
+  document.querySelectorAll("[data-vmark]").forEach(b=>b.onclick=async()=>{
+    if(!confirm("Mark this signature VALIDATED for this version of DFX?\n\nThe record and report are linked to the signature. Changing the signature later clears it."))return;
+    try{const sg=await api("/api/validate/mark",{name:b.dataset.vmark});await loadSigs();toast(`${sg.name} marked validated`,"ok");content()}
+    catch(e){$("#vErr").textContent=e.message}});
+}
+
 /* ---------------- state polling ---------------- */
 function side(){
   const c=S.case||{},e=S.source||{},h=S.evidence_hash||{},j=S.job||{};
-  $("#ver").textContent=S.version||"";
+  $("#ver").textContent=(S.version||"")+(S.prerelease?" pre-release":"");
   $("#casebadge").textContent=c.case_number?`Case ${c.case_number}${c.examiner?" · "+c.examiner:""}`:(c.folder?"Case open":"No case open");
   $("#sideCase").innerHTML=c.folder?`<div>Number</div><div>${esc(c.case_number||"")}</div><div>Examiner</div><div>${esc(c.examiner||"")}</div><div>Folder</div><div class="mono">${esc(c.folder)}</div>`:`<div>&mdash;</div><div class="muted">New / Open Case</div>`;
   $("#sideEv").innerHTML=e.path?`<div>Source</div><div class="mono">${esc(e.path)}</div><div>Type</div><div>${esc(e.kind)}</div><div>Size</div><div>${fmt(e.size)}</div>
@@ -897,7 +943,7 @@ function side(){
     ${j.error?`<div>Error</div><div class="err">${esc(j.error)}</div>`:""}`:`<div>&mdash;</div><div class="muted">idle</div>`;
   $("#stBar").style.width=(j.running?pct:0)+"%";
   $("#stPct").textContent=j.running?`${pct.toFixed(1)}%  ${fmt(p.done)} / ${fmt(p.total)}${p.elapsed&&p.done?"  ·  "+eta(p):""}`:"";
-  $("#stText").textContent=j.running?`${j.type==="carve"?"Carving":"Hashing"}…`:(j.error?"Last job failed":"Ready");
+  $("#stText").textContent=j.running?`${{carve:"Carving",hash:"Hashing",validate:"Validating"}[j.type]||"Working"}${p.stage?" ("+p.stage+")":""}…`:(j.error?"Last job failed":"Ready");
   const log=j.log||[];if(log.length!==lastLogLen){$("#log").textContent=log.join("\n");$("#log").scrollTop=1e9;lastLogLen=log.length;
     $("#lastlog").textContent=log.length?log[log.length-1]:""}
 }
@@ -915,8 +961,17 @@ $("#loggrip").onmousedown=e=>{e.preventDefault();const y0=e.clientY,h0=$("#log")
   const mv=ev=>{const h=Math.max(60,Math.min(window.innerHeight*0.6,h0+(y0-ev.clientY)));$("#log").style.height=h+"px"};
   const up=()=>{document.removeEventListener("mousemove",mv);document.removeEventListener("mouseup",up);store.set("logHeight",$("#log").offsetHeight)};
   document.addEventListener("mousemove",mv);document.addEventListener("mouseup",up)};
-let wasRunning=false;
-async function refresh(){try{S=await api("/api/state");side();if(wasRunning&&!S.job.running&&TAB==="results")loadRuns();wasRunning=S.job.running}catch(e){$("#stText").textContent="Server not responding"}}
+
+let lastDone=null;
+async function refresh(){try{S=await api("/api/state");side();
+  const finished=lastDone!==null&&S.job.done_seq!==lastDone&&!S.job.running;
+  lastDone=S.job.done_seq;
+  if(finished){if(TAB==="results")loadRuns();
+    if(S.job.type==="validate"){await loadValidations();
+      if(S.job.error)toast("Validation stopped: "+S.job.error,"bad");
+      else if(S.job.result)toast(`Validation ${S.job.result.verdict}`,S.job.result.verdict==="PASS"?"ok":"bad");
+      if(TAB==="sigs"&&VAL.open)content()}}
+  }catch(e){$("#stText").textContent="Server not responding"}}
 async function loadSigs(){SIGS=await api("/api/signatures")}
 (async()=>{await loadSigs();await refresh();setTab("home");setInterval(refresh,1000)})();
 </script>

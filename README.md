@@ -4,7 +4,7 @@
 > **New project — not yet tested on real DVR evidence.**
 > This is an early development build. It has only been tested against synthetic test images, not against drives or exports from real DVR/NVR recorders. Every built-in signature is unvalidated, and the Dahua DHAV offsets are partly unconfirmed. **Do not use it for casework** or rely on its results until it has been validated against known test data from real recorders.
 
-**Version 2026.11.10 — Build 2: signature learner + hex viewer — Build 1 + E01 built in (ewfprobe) + mediacarve length judge**
+**Version 2026.11.1.12 (pre-release build 12) — Build 2: signature learner + hex viewer — Build 1 + E01 built in (ewfprobe) + mediacarve length judge**
 
 The full User Manual is built into the program (ribbon → **User Manual**) and is also at [`dfx/web/manual.html`](dfx/web/manual.html).
 
@@ -96,6 +96,9 @@ python -m dfx doctor
 
 ## Validation status
 
+**Validate** (Signatures tab) proves a signature on known data: give it the known files (originals), a test image you prepared holding them, and optionally a negative image. DFX hashes everything, carves with only that signature, and records PASS only if every known file is recovered byte-for-byte, nothing unexpected is found, and the negative image yields nothing. A signature can be marked validated only from a PASS record, only for the exact definition tested, and only with the same DFX version; changing the signature later clears it.
+
+
 Every built-in signature ships **unvalidated**, and the report says so.
 
 * The Dahua DHAV offsets follow publicly documented parsers, but the channel offset is not confirmed.
@@ -110,6 +113,10 @@ Before using DFX on casework:
 The included tests (`python -m pytest`) do this on a synthetic drive image. The image contains MP4, AVI, a 40-frame DHAV chain, a broken chain and a custom header/footer pattern placed among random data. The tests check exact offsets, lengths and hashes, chunk-boundary handling, resume, dry run, and that the evidence hash is unchanged.
 
 Measured speed on the build machine was about 220 MB/s with all signatures enabled. On spinning drives, disk speed will usually be the limit.
+
+## Version numbers
+
+Official releases are numbered by the year and month they are published: `Year.Month.Release` (for example `2026.12.1`). Pre-release builds add a build number: `Year.Month.Release.Build` (for example `2026.11.1.12`). Every new version is higher than every published one. See CHANGELOG.md.
 
 ## Build an .exe
 

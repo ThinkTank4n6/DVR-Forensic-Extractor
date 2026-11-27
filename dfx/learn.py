@@ -368,8 +368,9 @@ def learn(samples: list[Sample], sig_id: str = "", name: str = "") -> dict:
         lead += bytes([v])
     recognized = recognize_standard(samples) or _recognize_asf(samples)
     if recognized:
+        how = "DFX's ASF object walk" if recognized["kind"] == "asf" else "mediacarve"
         warnings.insert(0, f"These are standard {recognized['kind'].upper()} files: DFX's built-in signature "
-                           f"'{recognized['builtin']}' already recovers them, with exact lengths from mediacarve. "
+                           f"'{recognized['builtin']}' already recovers them, with exact lengths from {how}. "
                            "You don't need a learned signature for them.")
     findings.append({"what": "header", "value": _hex_pattern(hdr),
                      "evidence": f"first bytes of all {len(samples)} samples"

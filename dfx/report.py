@@ -34,13 +34,22 @@ def build_report(run_dir: str | Path, case: dict | None = None, evidence_hash: d
     case = case or {}
     st = sess["stats"]
     src = sess["source"]
-    unvalidated = [s for s in sess["signatures"] if not s.get("validated")]
+    def _vstate(sg):
+        v = sg.get("validation") or {}
+        if not sg.get("validated"):
+            return "no", "<span class=bad>No</span>"
+        if v and v.get("dfx_version") != sess.get("dfx_version", __version__):
+            return "stale", f"<span class=bad>Validated with DFX {_h(v.get('dfx_version'))} - re-validate</span>"
+        if v:
+            return "yes", f"Yes ({_h(v.get('date'))}, {v.get('known_files', '?')} known files)"
+        return "manual", "Yes (marked by examiner; no DFX validation record)"
+    unvalidated = [s for s in sess["signatures"] if _vstate(s)[0] in ("no", "stale")]
     now = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     warn = ("<div class='warn'><b>Early development build of DFX &mdash; not yet tested on real DVR evidence.</b> "
             "Results must be independently verified.</div>")
     if unvalidated:
-        warn += ("<div class='warn'><b>Unvalidated signatures used:</b> "
+        warn += ("<div class='warn'><b>Unvalidated (or out-of-date validated) signatures used:</b> "
                  + ", ".join(_h(s["name"]) for s in unvalidated)
                  + ". Results from these signatures have not been checked against known test data "
                    "with this version of the tool.</div>")
@@ -75,7 +84,7 @@ def build_report(run_dir: str | Path, case: dict | None = None, evidence_hash: d
     sig_rows = "".join(
         f"<tr><td>{_h(s['name'])}</td><td class='mono'>{_h(s['id'])}</td><td>{_h(s['mode'])}</td>"
         f"<td class='mono'>{_h(s['header'])}</td><td class='mono'>{_h(s.get('footer'))}</td>"
-        f"<td>{'Yes' if s.get('validated') else '<span class=bad>No</span>'}</td>"
+        f"<td>{_vstate(s)[1]}</td>"
         f"<td>{st['per_signature'].get(s['id'], 0)}</td></tr>" for s in sess["signatures"])
 
     clock = sess.get("clock")

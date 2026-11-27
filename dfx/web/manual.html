@@ -48,7 +48,7 @@ ol li,ul li{margin:3px 0}
 </style>
 </head>
 <body>
-<header><div class="logo">DFX</div><h1>DVR Forensic Extractor &mdash; User Manual</h1><div class="v">Version <span id="ver">2026.11.10</span></div></header>
+<header><div class="logo">DFX</div><h1>DVR Forensic Extractor &mdash; User Manual</h1><div class="v">Version <span id="ver">2026.11.1.12</span></div></header>
 <div class="wrap">
 <nav>
  <b>Getting started</b>
@@ -446,6 +446,14 @@ DFX has only been tested against synthetic test images, not drives or exports fr
 <h2 id="help">Help tab</h2>
 <div class="ribbon"><div class="g"><div><span>User Manual</span><span>About</span></div><small>Help</small></div></div>
 <p><span class="btn">User Manual</span> opens this manual. <span class="btn">About</span> shows the version, copyright, license and project status.</p>
+<h3>Version numbers</h3>
+<table>
+<tr><th>Form</th><th>Example</th><th>Meaning</th></tr>
+<tr><td>Year.Month.Release.Build</td><td><code>2026.11.1.12</code></td><td><b>Pre-release build</b> 12 toward the next official release. Published on GitHub as a pre-release with the "not tested" warning.</td></tr>
+<tr><td>Year.Month.Release</td><td><code>2026.12.1</code></td><td><b>Official release</b>, numbered by the year and month it is published (the first in a month is .1). Published as a full release and marked Latest.</td></tr>
+</table>
+<p>Every new version is higher than every published one: <code>2026.11.1.12 &lt; 2026.11.2 &lt; 2026.12.1 &lt; 2026.12.1.1</code>. After an official release, the next pre-release builds continue from it (after <code>2026.12.1</code> come <code>2026.12.1.1</code>, <code>2026.12.1.2</code>&hellip;).</p>
+<p>Validation records are tied to the exact version, so re-run <span class="btn">Validate</span> after installing a new build.</p>
 
 <h2 id="modes">Carving modes</h2>
 <table>
@@ -574,7 +582,32 @@ python -m dfx doctor</code></pre>
 <p>The release build uses <code>DFX.exe</code> in place of <code>python -m dfx</code>.</p>
 
 <h2 id="validate">Validating signatures</h2>
-<p>A signature should be marked <b>Validated</b> only when you can show it works on data whose contents you already know. A suggested procedure:</p>
+<p>A signature should be marked <b>Validated</b> only when you can show it works on data whose contents you already know. DFX never marks a signature validated by itself.</p>
+<h3>The Validate button</h3>
+<p><span class="tab">Signatures</span> &rarr; <span class="btn">Validate</span> runs the test and keeps the record:</p>
+<ol>
+ <li><b>Prepare known media.</b> Wipe a small drive, copy the <b>known files</b> onto it (for example a recorder's exports, hashed when you received them), delete one or two, and image it through a write blocker. That image is the <b>test image</b>.</li>
+ <li>Optionally prepare a <b>negative image</b>: media that holds none of these files.</li>
+ <li>Choose the signature, add the known files, the test image and the negative image, and click <b>Run Validation</b>. Progress shows in the status bar.</li>
+ <li>DFX hashes the known files and both images, carves with <b>only</b> that signature, and compares SHA-256 values.</li>
+</ol>
+<table>
+<tr><th>PASS requires</th><th>Notes</th></tr>
+<tr><td>Every known file recovered byte-for-byte</td><td>A recovered item that starts the same but has the wrong length is reported as <i>wrong length</i>, with the reason.</td></tr>
+<tr><td>No unexpected items</td><td>Unless you tick <i>the test image may also hold other files of this type</i>; then they are listed, not failed.</td></tr>
+<tr><td>Nothing found in the negative image</td><td>Only if you gave one.</td></tr>
+<tr><td>No read problems</td><td>A failing drive can't validate anything.</td></tr>
+</table>
+<p>Each run writes <code>&lt;case&gt;\validation\&lt;signature&gt;_&lt;date_time&gt;\validation.json</code> and <code>validation_report.html</code>, and is listed under <b>Validation records</b>. On a PASS, <b>Mark Validated</b> saves the signature as validated with a link to that record. DFX refuses if:</p>
+<ul>
+ <li>the record isn't a PASS;</li>
+ <li>the signature was changed after the test (its definition SHA-256 differs);</li>
+ <li>the report file was changed or is missing (its SHA-256 differs);</li>
+ <li>the test was run with a different DFX version.</li>
+</ul>
+<p>Later, saving a <b>behavior</b> change to a validated signature (header, mode, lengths, sizes&hellip;) clears its validation; changing only its name or notes keeps it. Carve reports flag signatures validated with an older DFX version so you know to re-run Validate after an update.</p>
+<h3>Recorder-level validation (procedure)</h3>
+<p>For recorder drives, build the test image from the recorder itself:</p>
 <ol>
  <li>Use a recorder you control, of the same make and family. Set its clock from NTP and note the time.</li>
  <li>Record known events: point a camera at a screen showing an NTP-synced clock, and record set windows (for example channel 1, 10:00:00–10:05:00).</li>

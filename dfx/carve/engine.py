@@ -123,6 +123,11 @@ def _utc_now() -> str:
 
 
 # --------------------------------------------------------------------- engine
+def _dfx_version() -> str:
+    from .. import __version__
+    return __version__
+
+
 RESUME_LOCKED_OPTIONS = ("start", "end", "chunk_size", "dry_run", "force_sector_aligned", "max_items")
 
 
@@ -634,6 +639,7 @@ class Carver:
                            for s in self.sigs],
             "signatures_sha256": self._sig_fingerprint(),
             "length_judge": {"name": "mediacarve", "version": self._judge_version()} if self._judge_version() else None,
+            "dfx_version": _dfx_version(),
             "stats": asdict(self.stats),
         }
         self.session_path.write_text(json.dumps(data, indent=2), encoding="utf-8")

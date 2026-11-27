@@ -1,6 +1,23 @@
 # Changelog
 
-All versions are early development builds, **not yet tested on real DVR evidence**.
+## Version numbers
+- **Official release: Year.Month.Release** (3 parts), numbered by the **year and month it is published** (as FME does). The first official release in a month is `.1`, the next `.2`. Example: published in December 2026 -> `v2026.12.1`.
+- **Pre-release build: Year.Month.Release.Build** (4 parts). Builds count up after the last release line: `v2026.11.1.12`, `v2026.11.1.13`, ... After official `v2026.12.1`, the next builds are `v2026.12.1.1`, `v2026.12.1.2`, ...
+- **Every new version must be higher than every version already published.** Compared part by part, a missing 4th part comes first: `2026.11.1 < 2026.11.1.12 < 2026.11.2 < 2026.12.1 < 2026.12.1.1`. So an official release published in the same month as its pre-release line takes the next number (November: `v2026.11.2`, not `v2026.11.1`).
+
+The release workflow decides pre-release (4 parts) vs official (3 parts, marked Latest) from the tag, and refuses a tag that doesn't match `VERSION` or isn't higher than every existing tag.
+Versions before v2026.11.1.12 used three parts for every build; they were all pre-releases.
+
+All builds so far are early development builds, **not yet tested on real DVR evidence**.
+
+## v2026.11.1.12 - Validate (first build with the new version numbers)
+- Version scheme: pre-release builds are Year.Month.Release.Build; the release workflow publishes 4-part tags as pre-releases and 3-part tags as official releases (marked Latest), and refuses a tag that doesn't match VERSION. About and `doctor` say "pre-release build 12 of 2026.11.1".
+- **Validate** (Signatures > Validate): known files + a test image (+ optional negative image) -> hashes everything, carves with only the signature under test, and records **PASS** only if every known file is recovered byte-for-byte, no unexpected items are found (unless the examiner states the media may hold others), the negative image yields nothing, and there were no read problems. Wrong-length recoveries are diagnosed. JSON record + HTML report in `<case>/validation/`.
+- **Mark Validated** only from a PASS record, only for the exact signature definition tested (definition SHA-256), only with the same DFX version, and only if the report is unchanged (report SHA-256). The record is stored with the signature. Saving a behavior change from the editor clears it; label-only edits keep it.
+- Carve reports show each signature's validation date, flag signatures validated with an older DFX version ("re-validate"), and mark validations entered by hand without a DFX record.
+- Fixed: two runs or validations started in the same second collided on folder name (the second crashed).
+- Fixed: jobs that finished between two status polls (under a second) never refreshed the page.
+- Learner: the "standard format" message names the right length method (ASF object walk vs mediacarve) and isn't shown twice; it suggests validating the built-in signature with the same files.
 
 ## v2026.11.10 - Dahua .asf exports
 - **Found with the examiner's Dahua .asf exports:** the learner reported "no length field or footer" and a failed self-test. ASF records its size at byte 70 (past the learner's 64-byte search), has no frame marker at byte 0, and DFX's ASF signature only took a fixed size.

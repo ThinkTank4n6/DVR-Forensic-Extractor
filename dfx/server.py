@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import json
 import mimetypes
 import os
@@ -45,7 +46,8 @@ class App:
         self.case: dict = {}
         self.source: dict = {}
         self.evidence_hash: dict = {}
-        self.job = {"type": None, "running": False, "progress": {}, "log": [], "result": None, "error": None}
+        self.job = {"type": None, "running": False, "progress": {}, "log": [], "result": None, "error": None,
+                    "seq": 0, "done_seq": 0}
         self._cancel = threading.Event()
         self._lock = threading.Lock()
         self._log_lock = threading.Lock()
@@ -131,7 +133,8 @@ class App:
             if self.job["running"]:
                 raise RuntimeError(f"a {self.job['type']} job is already running")
             self._cancel.clear()
-            self.job.update(type=kind, running=True, progress={}, result=None, error=None)
+            self.job.update(type=kind, running=True, progress={}, result=None, error=None, seq=self.job["seq"] + 1)
+            seq = self.job["seq"]
 
         def wrap():
             try:
@@ -146,6 +149,7 @@ class App:
             finally:
                 with self._lock:
                     self.job["running"] = False
+                    self.job["done_seq"] = seq     # lets the page notice jobs that finished between polls
         threading.Thread(target=wrap, daemon=True).start()
 
     def start_hash(self):
@@ -202,7 +206,8 @@ class App:
             if not out.exists():
                 raise ValueError(f"run {resume} not found")
         else:
-            out = runs / ("carve_" + _dt.datetime.now().strftime("%Y%m%d_%H%M%S"))
+            runs.mkdir(parents=True, exist_ok=True)
+            out = unique_dir(runs, "carve_" + _dt.datetime.now().strftime("%Y%m%d_%H%M%S"))
         size = int(self.source["size"])
         start = int(data.get("start") or 0)
         end = int(data.get("end") or 0) or size
@@ -372,10 +377,107 @@ class App:
                       f"header {r['signature']['header']}, self-test {'passed' if r['self_test']['passed'] else 'FAILED'}")
         return r
 
+    # ---------------------------------------------------------------- validation
+    def _validation_dir(self) -> Path:
+        if not self.case.get("folder"):
+            raise ValueError("open or create a case first: validation records are kept in the case")
+        return Path(self.case["folder"]) / "validation"
+
+    def start_validation(self, data: dict) -> str:
+        from .validate import run_validation
+        sig = self.lib.get((data.get("signature_id") or "").strip())
+        if not sig:
+            raise ValueError("choose the signature to validate")
+        if sig.get("problems"):
+            raise ValueError("fix the signature first: " + "; ".join(sig["problems"]))
+        known = [p for p in (data.get("known_files") or []) if p]
+        test_image = (data.get("test_image") or "").strip()
+        negative = (data.get("negative_image") or "").strip()
+        if not known or not test_image:
+            raise ValueError("add the known files and choose the test image")
+        out = unique_dir(self._validation_dir(), f"{sig['id']}_{_dt.datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        out.mkdir(parents=True)
+        name = out.name
+        case = dict(self.case)
+
+        def run():
+            self.case_log(f"Validation started: signature {sig['id']}, {len(known)} known file(s), "
+                          f"test image {test_image}" + (f", negative image {negative}" if negative else ""))
+            r = run_validation(sig, known, test_image, out, negative_image=negative,
+                               allow_other=bool(data.get("allow_other")), case=case, log=self.case_log,
+                               progress=lambda **kw: self._prog(**kw), cancel=self._cancel.is_set)
+            return {"validation": name, "verdict": r["verdict"]}
+        self._start("validate", run)
+        return name
+
+    def validations(self) -> list[dict]:
+        d = self._validation_dir() if self.case.get("folder") else None
+        out = []
+        for p in sorted(d.glob("*/validation.json"), reverse=True) if d and d.exists() else []:
+            try:
+                r = json.loads(p.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            out.append({"name": p.parent.name, "verdict": r["verdict"], "signature_id": r["signature_id"],
+                        "finished": r["finished"], "failures": r["failures"],
+                        "known": len(r["known_files"]),
+                        "recovered": sum(1 for k in r["known_files"] if k["status"] == "recovered"),
+                        "unexpected": len(r["unexpected"]),
+                        "negative": (r["negative"] or {}).get("items")})
+        return out
+
+    def mark_validated(self, name: str) -> dict:
+        from .validate import definition_sha256
+        p = self._validation_dir() / Path(name).name / "validation.json"
+        if not p.exists():
+            raise ValueError("validation record not found")
+        r = json.loads(p.read_text(encoding="utf-8"))
+        if r["verdict"] != "PASS":
+            raise ValueError("only a PASS validation can mark a signature validated")
+        if r["tool"]["version"] != __version__:
+            raise ValueError(f"this validation was run with DFX {r['tool']['version']}; run it again with {__version__}")
+        sig = self.lib.get(r["signature_id"])
+        if not sig:
+            raise ValueError(f"signature {r['signature_id']} no longer exists")
+        if definition_sha256(sig) != r["definition_sha256"]:
+            raise ValueError("the signature was changed after this validation; validate it again")
+        report = Path(r["report"])
+        rsha = hashlib.sha256(report.read_bytes()).hexdigest() if report.exists() else ""
+        if rsha != r.get("report_sha256"):
+            raise ValueError("the validation report was changed or is missing; validate again")
+        sig = dict(sig)
+        sig["validated"] = True
+        sig["validation"] = {"date": r["finished"], "dfx_version": r["tool"]["version"],
+                             "examiner": r["case"].get("examiner", ""), "report": str(report),
+                             "report_sha256": rsha, "definition_sha256": r["definition_sha256"],
+                             "known_files": len(r["known_files"]),
+                             "negative_control": r["negative"] is not None}
+        note = (f"Validated {r['finished']} with {APP_NAME} {r['tool']['version']} by "
+                f"{r['case'].get('examiner') or 'the examiner'}: {len(r['known_files'])} known file(s) recovered "
+                f"byte-for-byte" + (", negative control clean" if r["negative"] else "") + f". Report {report}.")
+        sig["notes"] = (sig.get("notes", "") + " " + note).strip()
+        saved = self.lib.save_user(sig)
+        self.case_log(f"Signature {saved['id']} marked VALIDATED from validation {name} (report SHA-256 {rsha})")
+        return saved
+
+    def save_signature(self, data: dict) -> dict:
+        """Editor save. Keeps a DFX validation record only while the definition is unchanged."""
+        from .validate import definition_sha256
+        old = self.lib.get((data.get("id") or "").strip())
+        rec = data.get("validation") if "validation" in data else (old or {}).get("validation")
+        if rec and rec.get("definition_sha256") != definition_sha256(data):
+            data = dict(data, validated=False, validation=None)
+            self.case_log(f"Signature {data.get('id')} changed: its validation no longer applies (validated cleared)")
+        else:
+            data = dict(data, validation=rec)
+        return self.lib.save_user(data)
+
     def state(self):
         with self._lock:
             job = json.loads(json.dumps(self.job))
-        return {"app": APP_NAME, "version": __version__, "case": self.case,
+        from . import version_label, IS_PRERELEASE
+        return {"app": APP_NAME, "version": __version__, "version_label": version_label(),
+                "prerelease": IS_PRERELEASE, "case": self.case,
                 "source": self.source, "evidence_hash": self.evidence_hash, "job": job,
                 "platform": sys.platform}
 
@@ -403,6 +505,15 @@ def browse(path: str):
         return {"path": str(p), "parent": str(p.parent), "dirs": [], "files": [], "error": str(e)}
     parent = "" if p.parent == p else str(p.parent)
     return {"path": str(p), "parent": parent, "dirs": dirs, "files": files}
+
+
+def unique_dir(parent: Path, base: str) -> Path:
+    """parent/base, or parent/base_2, _3 ... if a run or validation started the same second."""
+    p, n = parent / base, 2
+    while p.exists():
+        p = parent / f"{base}_{n}"
+        n += 1
+    return p
 
 
 def native_pick(mode: str, title: str = "") -> dict:
@@ -506,6 +617,11 @@ def make_handler(app: App, port: int):
                 if u.path.startswith("/clock/") and u.path.endswith("/report.html") and app.case.get("folder"):
                     did = Path(unquote(u.path[7:-12])).name
                     return self._file(Path(app.case["folder"]) / f"clock_report_{did}.html", "text/html; charset=utf-8")
+                if u.path == "/api/validations":
+                    return self._json(app.validations() if app.case.get("folder") else [])
+                if u.path.startswith("/validation/") and u.path.endswith("/report.html") and app.case.get("folder"):
+                    vn = Path(unquote(u.path[12:-12])).name
+                    return self._file(app._validation_dir() / vn / "validation_report.html", "text/html; charset=utf-8")
                 if u.path == "/api/runs":
                     return self._json(app.runs())
                 if u.path == "/api/run":
@@ -539,7 +655,7 @@ def make_handler(app: App, port: int):
                     app.cancel()
                     return self._json({"ok": True})
                 if p == "/api/signatures":
-                    s = app.lib.save_user(data)
+                    s = app.save_signature(data)
                     app.case_log(f"Signature saved: {s['id']} ({s['name']})")
                     return self._json(s)
                 if p == "/api/signatures/delete":
@@ -595,6 +711,10 @@ def make_handler(app: App, port: int):
                     return self._json(app.learn(data))
                 if p == "/api/pick":
                     return self._json(native_pick(data.get("mode", "file"), data.get("title", "")))
+                if p == "/api/validate":
+                    return self._json({"validation": app.start_validation(data)})
+                if p == "/api/validate/mark":
+                    return self._json(app.mark_validated(data.get("name", "")))
                 if p == "/api/report":
                     run = Path(app.case["folder"]) / "runs" / Path(data.get("run", "")).name
                     sess = json.loads((run / "carve_session.json").read_text(encoding="utf-8"))

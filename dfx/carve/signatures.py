@@ -24,6 +24,8 @@ A signature is a JSON object. Fields:
   judge            "mediacarve" = let the vendored mediacarve decide where a standard
                    container (MP4/MOV, AVI, MKV/WebM) ends; the mode is the fallback
   validated        set true only after the signature passed your validation tests
+  validation       written by DFX's Validate: {date, dfx_version, examiner, report,
+                   report_sha256, definition_sha256}; cleared if the definition changes
   notes            free text (where it came from, what it was tested against)
 
 `box_walk` is a structural mode for ISO media (MP4/MOV/3GP): the item length
@@ -61,6 +63,7 @@ DEFAULTS = {
     "notes": "",
     "extension": "bin",
     "judge": "",
+    "validation": None,
 }
 
 
